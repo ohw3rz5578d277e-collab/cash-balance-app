@@ -1,0 +1,1444 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>現金精算アプリ</title>
+  <meta name="theme-color" content="#111827" />
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --primary: #111827;
+      --primary-2: #374151;
+      --accent: #028760;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --ok: #028760;
+      --shadow: 0 18px 45px rgba(15, 23, 42, .08);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(2, 135, 96, .10), transparent 34%),
+        linear-gradient(180deg, #ffffff 0%, var(--bg) 240px, var(--bg) 100%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      padding: 18px 14px 100px;
+    }
+
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      padding: 10px 0 12px;
+      backdrop-filter: blur(18px);
+      background: rgba(244, 245, 247, .82);
+    }
+
+    .top-inner {
+      background: rgba(255,255,255,.9);
+      border: 1px solid rgba(229,231,235,.9);
+      box-shadow: 0 12px 28px rgba(15,23,42,.06);
+      border-radius: 22px;
+      padding: 14px;
+    }
+
+    .brand {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      letter-spacing: .02em;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .today-pill {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #bbf7d0;
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .tab-btn {
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--primary-2);
+      border-radius: 999px;
+      padding: 10px 9px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .tab {
+      display: none;
+      margin-top: 16px;
+    }
+
+    .tab.active {
+      display: block;
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    @media (min-width: 780px) {
+      .summary-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 10px 22px rgba(15,23,42,.045);
+      padding: 14px;
+    }
+
+    .summary-card {
+      min-height: 96px;
+    }
+
+    .summary-card .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .summary-card .value {
+      font-size: 23px;
+      line-height: 1.15;
+      font-weight: 900;
+      letter-spacing: -.03em;
+      word-break: keep-all;
+    }
+
+    .summary-card .sub {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 6px;
+    }
+
+    .status-ok {
+      color: var(--ok);
+    }
+
+    .status-ng {
+      color: var(--danger);
+    }
+
+    .panel {
+      background: rgba(255,255,255,.92);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.25;
+      letter-spacing: .01em;
+    }
+
+    .panel-help {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .section-total {
+      flex: 0 0 auto;
+      text-align: right;
+      font-weight: 900;
+      font-size: 20px;
+      letter-spacing: -.02em;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    @media (min-width: 740px) {
+      .form-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 14px;
+      padding: 12px;
+      outline: none;
+    }
+
+    .field textarea {
+      min-height: 46px;
+      resize: vertical;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      border-color: rgba(2, 135, 96, .55);
+      box-shadow: 0 0 0 4px rgba(2, 135, 96, .10);
+    }
+
+    .money-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    @media (min-width: 760px) {
+      .money-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .money-row {
+      display: grid;
+      grid-template-columns: 1fr 44px 82px 44px;
+      gap: 8px;
+      align-items: center;
+      background: var(--surface-2);
+      border: 1px solid #eef2f7;
+      border-radius: 16px;
+      padding: 9px;
+    }
+
+    .denom {
+      min-width: 0;
+    }
+
+    .denom-name {
+      font-weight: 900;
+      font-size: 15px;
+      line-height: 1.15;
+    }
+
+    .denom-sub {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 3px;
+    }
+
+    .count-btn {
+      width: 44px;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--primary);
+    }
+
+    .count-btn:active {
+      transform: scale(.98);
+    }
+
+    .count-input {
+      width: 82px;
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 900;
+      outline: none;
+      background: #fff;
+    }
+
+    .count-input:focus {
+      border-color: rgba(2, 135, 96, .55);
+      box-shadow: 0 0 0 4px rgba(2, 135, 96, .10);
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    @media (min-width: 620px) {
+      .actions {
+        grid-template-columns: 1.4fr 1fr 1fr;
+      }
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 16px;
+      padding: 13px 14px;
+      font-weight: 900;
+      box-shadow: 0 10px 20px rgba(15,23,42,.08);
+    }
+
+    .btn-primary {
+      color: #fff;
+      background: var(--accent);
+    }
+
+    .btn-dark {
+      color: #fff;
+      background: var(--primary);
+    }
+
+    .btn-light {
+      color: var(--primary);
+      background: #fff;
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+
+    .btn-danger {
+      color: #fff;
+      background: var(--danger);
+    }
+
+    .notice {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      border-radius: 18px;
+      padding: 12px;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+
+    .record-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .record-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 13px;
+    }
+
+    .record-main {
+      min-width: 0;
+    }
+
+    .record-date {
+      font-weight: 900;
+      font-size: 15px;
+    }
+
+    .record-small {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .badge-ok {
+      color: #065f46;
+      background: #ecfdf5;
+      border: 1px solid #bbf7d0;
+    }
+
+    .badge-ng {
+      color: #991b1b;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+    }
+
+    .detail-btn {
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      border-radius: 999px;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .empty {
+      color: var(--muted);
+      text-align: center;
+      border: 1px dashed #cbd5e1;
+      border-radius: 18px;
+      padding: 22px;
+      background: rgba(255,255,255,.65);
+    }
+
+    .backup-box {
+      display: grid;
+      gap: 10px;
+    }
+
+    .file-input {
+      width: 100%;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(18px + var(--safe-bottom));
+      transform: translateX(-50%) translateY(20px);
+      z-index: 100;
+      width: min(92vw, 430px);
+      background: #111827;
+      color: #fff;
+      border-radius: 16px;
+      padding: 13px 15px;
+      font-weight: 800;
+      box-shadow: 0 20px 45px rgba(0,0,0,.22);
+      opacity: 0;
+      pointer-events: none;
+      transition: .22s ease;
+      text-align: center;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .bottom-summary {
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      z-index: 25;
+      transform: translateX(-50%);
+      width: min(1100px, 100%);
+      padding: 10px 14px calc(10px + var(--safe-bottom));
+      background: linear-gradient(180deg, rgba(244,245,247,0), rgba(244,245,247,.98) 18%);
+    }
+
+    .bottom-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: rgba(17, 24, 39, .96);
+      color: #fff;
+      border-radius: 20px;
+      padding: 10px;
+      box-shadow: 0 18px 45px rgba(15,23,42,.26);
+    }
+
+    .bottom-card {
+      padding: 5px 8px;
+    }
+
+    .bottom-label {
+      color: rgba(255,255,255,.68);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .bottom-value {
+      font-size: 18px;
+      font-weight: 950;
+      letter-spacing: -.03em;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .danger-zone {
+      border-color: #fecaca;
+      background: #fff7f7;
+    }
+
+    .small-text {
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="top-inner">
+        <div class="brand">
+          <div>
+            <h1>現金精算アプリ</h1>
+            <p>開始時・終了時の現金差異をすぐ確認</p>
+          </div>
+          <div class="today-pill" id="todayPill">今日</div>
+        </div>
+
+        <nav class="tabs" aria-label="メニュー">
+          <button class="tab-btn active" data-tab="home">ホーム</button>
+          <button class="tab-btn" data-tab="history">履歴</button>
+          <button class="tab-btn" data-tab="backup">保存/出力</button>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="tab active" id="tab-home">
+        <div class="notice">
+          <strong>計算式：</strong>
+          終了時の理論金額 = 開始時 + 受け取った金額 - おつり + チップ。
+          差異が0円ならOKです。
+        </div>
+
+        <div class="summary-grid">
+          <div class="card summary-card">
+            <div class="label">開始時</div>
+            <div class="value" id="sumStart">¥0</div>
+            <div class="sub">最初に持っていた現金</div>
+          </div>
+          <div class="card summary-card">
+            <div class="label">現金売上</div>
+            <div class="value" id="sumSales">¥0</div>
+            <div class="sub">受取 − おつり + チップ</div>
+          </div>
+          <div class="card summary-card">
+            <div class="label">終了時</div>
+            <div class="value" id="sumEnd">¥0</div>
+            <div class="sub">最後に数えた現金</div>
+          </div>
+          <div class="card summary-card">
+            <div class="label">差異</div>
+            <div class="value" id="sumDiff">¥0</div>
+            <div class="sub" id="sumDiffHelp">差異なし</div>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">基本情報</h2>
+              <p class="panel-help">日付・開始時刻・終了時刻を記録できます。</p>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="workDate">日付</label>
+              <input id="workDate" type="date" />
+            </div>
+            <div class="field">
+              <label for="startTime">開始時刻</label>
+              <input id="startTime" type="time" />
+            </div>
+            <div class="field">
+              <label for="endTime">終了時刻</label>
+              <input id="endTime" type="time" />
+            </div>
+            <div class="field">
+              <label for="memo">メモ</label>
+              <textarea id="memo" placeholder="例：夜稼働 / 雨 / 現金多め"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <div id="moneySections"></div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="saveBtn">この内容を保存</button>
+          <button class="btn btn-light" id="newBtn">新規入力</button>
+          <button class="btn btn-danger" id="deleteBtn">この記録を削除</button>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">本日の記録</h2>
+              <p class="panel-help">ホームには今日の記録だけ表示します。</p>
+            </div>
+          </div>
+          <div id="todayList" class="record-list"></div>
+        </section>
+      </section>
+
+      <section class="tab" id="tab-history">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">履歴</h2>
+              <p class="panel-help">過去のデータは日付リストで表示します。詳細を押すとホーム画面で確認できます。</p>
+            </div>
+          </div>
+          <div id="historyList" class="record-list"></div>
+        </section>
+      </section>
+
+      <section class="tab" id="tab-backup">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">保存 / 出力</h2>
+              <p class="panel-help">スマホからPCへ移したい場合は、JSONを書き出して読み込めます。</p>
+            </div>
+          </div>
+
+          <div class="backup-box">
+            <button class="btn btn-dark" id="exportJsonBtn">JSONバックアップを書き出す</button>
+            <button class="btn btn-light" id="exportCsvBtn">CSVで書き出す</button>
+
+            <div class="field">
+              <label for="importFile">JSONバックアップを読み込む</label>
+              <input class="file-input" id="importFile" type="file" accept="application/json,.json" />
+            </div>
+
+            <p class="small-text">
+              ※ このアプリは無料で使えるように、サーバーを使わずブラウザ内に保存します。
+              機種変更・ブラウザ変更・キャッシュ削除の前にバックアップしてください。
+            </p>
+          </div>
+        </section>
+
+        <section class="panel danger-zone">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">危険な操作</h2>
+              <p class="panel-help">全データを削除します。バックアップ後に行ってください。</p>
+            </div>
+          </div>
+          <button class="btn btn-danger" id="clearAllBtn">全データを削除</button>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="bottom-summary" aria-live="polite">
+    <div class="bottom-inner">
+      <div class="bottom-card">
+        <div class="bottom-label">理論上の終了金額</div>
+        <div class="bottom-value" id="bottomExpected">¥0</div>
+      </div>
+      <div class="bottom-card">
+        <div class="bottom-label">差異</div>
+        <div class="bottom-value" id="bottomDiff">¥0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">保存しました</div>
+
+  <script>
+    const STORAGE_KEY = "cash_balance_app_v1";
+
+    const DENOMS_ALL = [
+      { value: 10000, label: "1万円札" },
+      { value: 5000, label: "5千円札" },
+      { value: 2000, label: "2千円札" },
+      { value: 1000, label: "千円札" },
+      { value: 500, label: "500円玉" },
+      { value: 100, label: "100円玉" },
+      { value: 50, label: "50円玉" },
+      { value: 10, label: "10円玉" },
+      { value: 5, label: "5円玉" },
+      { value: 1, label: "1円玉" }
+    ];
+
+    const DENOMS_COINS = [
+      { value: 500, label: "500円玉" },
+      { value: 100, label: "100円玉" },
+      { value: 50, label: "50円玉" },
+      { value: 10, label: "10円玉" },
+      { value: 5, label: "5円玉" },
+      { value: 1, label: "1円玉" }
+    ];
+
+    const SECTIONS = [
+      {
+        key: "start",
+        title: "① 開始時の現金",
+        help: "稼働前に持っている現金を金種ごとに入力します。",
+        denoms: DENOMS_ALL
+      },
+      {
+        key: "received",
+        title: "② お客様から受け取った金額",
+        help: "お客様から受け取った現金を金種ごとに入力します。",
+        denoms: DENOMS_ALL
+      },
+      {
+        key: "change",
+        title: "③ おつりで返した金額",
+        help: "お客様へ返したおつりを金種ごとに入力します。",
+        denoms: DENOMS_ALL
+      },
+      {
+        key: "tips",
+        title: "④ チップ",
+        help: "チップは小銭だけ入力できます。",
+        denoms: DENOMS_COINS
+      },
+      {
+        key: "end",
+        title: "⑤ 終了時の現金",
+        help: "稼働終了後、実際に手元にある現金を数えて入力します。",
+        denoms: DENOMS_ALL
+      }
+    ];
+
+    let records = loadRecords();
+    let state = createEmptyState();
+
+    const els = {
+      todayPill: document.getElementById("todayPill"),
+      workDate: document.getElementById("workDate"),
+      startTime: document.getElementById("startTime"),
+      endTime: document.getElementById("endTime"),
+      memo: document.getElementById("memo"),
+      moneySections: document.getElementById("moneySections"),
+
+      sumStart: document.getElementById("sumStart"),
+      sumSales: document.getElementById("sumSales"),
+      sumEnd: document.getElementById("sumEnd"),
+      sumDiff: document.getElementById("sumDiff"),
+      sumDiffHelp: document.getElementById("sumDiffHelp"),
+      bottomExpected: document.getElementById("bottomExpected"),
+      bottomDiff: document.getElementById("bottomDiff"),
+
+      saveBtn: document.getElementById("saveBtn"),
+      newBtn: document.getElementById("newBtn"),
+      deleteBtn: document.getElementById("deleteBtn"),
+
+      todayList: document.getElementById("todayList"),
+      historyList: document.getElementById("historyList"),
+
+      exportJsonBtn: document.getElementById("exportJsonBtn"),
+      exportCsvBtn: document.getElementById("exportCsvBtn"),
+      importFile: document.getElementById("importFile"),
+      clearAllBtn: document.getElementById("clearAllBtn"),
+      toast: document.getElementById("toast")
+    };
+
+    init();
+
+    function init() {
+      els.todayPill.textContent = formatDateJa(todayISO());
+      renderMoneySections();
+      bindEvents();
+      setFormFromState();
+      renderAll();
+    }
+
+    function bindEvents() {
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      });
+
+      els.workDate.addEventListener("input", () => {
+        state.date = els.workDate.value || todayISO();
+        renderAll();
+      });
+
+      els.startTime.addEventListener("input", () => {
+        state.startTime = els.startTime.value;
+      });
+
+      els.endTime.addEventListener("input", () => {
+        state.endTime = els.endTime.value;
+      });
+
+      els.memo.addEventListener("input", () => {
+        state.memo = els.memo.value;
+      });
+
+      els.saveBtn.addEventListener("click", saveCurrentRecord);
+      els.newBtn.addEventListener("click", () => {
+        if (!confirm("入力中の内容をクリアして新規入力にしますか？")) return;
+        state = createEmptyState();
+        setFormFromState();
+        renderAll();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        showToast("新規入力にしました");
+      });
+
+      els.deleteBtn.addEventListener("click", deleteCurrentRecord);
+
+      els.exportJsonBtn.addEventListener("click", exportJson);
+      els.exportCsvBtn.addEventListener("click", exportCsv);
+      els.importFile.addEventListener("change", importJson);
+      els.clearAllBtn.addEventListener("click", clearAllData);
+    }
+
+    function renderMoneySections() {
+      els.moneySections.innerHTML = SECTIONS.map((section) => {
+        const rows = section.denoms.map((denom) => {
+          const id = `${section.key}-${denom.value}`;
+          return `
+            <div class="money-row">
+              <div class="denom">
+                <div class="denom-name">${escapeHtml(denom.label)}</div>
+                <div class="denom-sub">${yen(denom.value)} × 枚数</div>
+              </div>
+              <button class="count-btn" type="button" data-action="minus" data-section="${section.key}" data-denom="${denom.value}" aria-label="${denom.label}を減らす">−</button>
+              <input
+                class="count-input"
+                id="${id}"
+                data-section="${section.key}"
+                data-denom="${denom.value}"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                value="0"
+              />
+              <button class="count-btn" type="button" data-action="plus" data-section="${section.key}" data-denom="${denom.value}" aria-label="${denom.label}を増やす">＋</button>
+            </div>
+          `;
+        }).join("");
+
+        return `
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2 class="panel-title">${escapeHtml(section.title)}</h2>
+                <p class="panel-help">${escapeHtml(section.help)}</p>
+              </div>
+              <div class="section-total" id="total-${section.key}">¥0</div>
+            </div>
+            <div class="money-list">
+              ${rows}
+            </div>
+          </section>
+        `;
+      }).join("");
+
+      document.querySelectorAll(".count-input").forEach((input) => {
+        input.addEventListener("input", () => {
+          const section = input.dataset.section;
+          const denom = input.dataset.denom;
+          setCount(section, denom, input.value);
+          renderAll();
+        });
+
+        input.addEventListener("focus", () => {
+          input.select();
+        });
+      });
+
+      document.querySelectorAll(".count-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const section = btn.dataset.section;
+          const denom = btn.dataset.denom;
+          const action = btn.dataset.action;
+          const current = getCount(section, denom);
+          const next = action === "plus" ? current + 1 : Math.max(0, current - 1);
+          setCount(section, denom, next);
+          const input = document.getElementById(`${section}-${denom}`);
+          if (input) input.value = next;
+          renderAll();
+        });
+      });
+    }
+
+    function renderAll() {
+      renderSectionTotals();
+      renderSummary();
+      renderTodayList();
+      renderHistoryList();
+      updateDeleteButton();
+    }
+
+    function renderSectionTotals() {
+      SECTIONS.forEach((section) => {
+        const totalEl = document.getElementById(`total-${section.key}`);
+        if (totalEl) totalEl.textContent = yen(totalSection(section.key));
+      });
+    }
+
+    function renderSummary() {
+      const calc = calculate();
+
+      els.sumStart.textContent = yen(calc.start);
+      els.sumSales.textContent = yen(calc.sales);
+      els.sumEnd.textContent = yen(calc.end);
+
+      els.sumDiff.textContent = yen(calc.diff);
+      els.bottomExpected.textContent = yen(calc.expectedEnd);
+      els.bottomDiff.textContent = yen(calc.diff);
+
+      els.sumDiff.classList.toggle("status-ok", calc.diff === 0);
+      els.sumDiff.classList.toggle("status-ng", calc.diff !== 0);
+      els.bottomDiff.classList.toggle("status-ok", calc.diff === 0);
+      els.bottomDiff.classList.toggle("status-ng", calc.diff !== 0);
+
+      if (calc.diff === 0) {
+        els.sumDiffHelp.textContent = "差異なし：OK";
+      } else if (calc.diff > 0) {
+        els.sumDiffHelp.textContent = `${yen(calc.diff)} 多いです`;
+      } else {
+        els.sumDiffHelp.textContent = `${yen(Math.abs(calc.diff))} 足りません`;
+      }
+    }
+
+    function renderTodayList() {
+      const today = todayISO();
+      const list = records
+        .filter((r) => r.date === today)
+        .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+
+      if (list.length === 0) {
+        els.todayList.innerHTML = `<div class="empty">今日の保存データはまだありません。</div>`;
+        return;
+      }
+
+      els.todayList.innerHTML = list.map(recordCardHtml).join("");
+      bindRecordButtons(els.todayList);
+    }
+
+    function renderHistoryList() {
+      if (records.length === 0) {
+        els.historyList.innerHTML = `<div class="empty">履歴はまだありません。</div>`;
+        return;
+      }
+
+      const list = [...records].sort((a, b) => {
+        const dateDiff = String(b.date).localeCompare(String(a.date));
+        if (dateDiff !== 0) return dateDiff;
+        return String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt));
+      });
+
+      els.historyList.innerHTML = list.map((record) => {
+        const calc = calculateRecord(record);
+        const ok = calc.diff === 0;
+        return `
+          <div class="record-item">
+            <div class="record-main">
+              <div class="record-date">${escapeHtml(formatDateJa(record.date))}</div>
+              <div class="record-small">
+                ${escapeHtml(record.startTime || "--:--")}〜${escapeHtml(record.endTime || "--:--")}
+              </div>
+            </div>
+            <span class="badge ${ok ? "badge-ok" : "badge-ng"}">${ok ? "OK" : "差異あり"}</span>
+            <button class="detail-btn" data-open-id="${record.id}">詳細</button>
+          </div>
+        `;
+      }).join("");
+
+      bindRecordButtons(els.historyList);
+    }
+
+    function recordCardHtml(record) {
+      const calc = calculateRecord(record);
+      const ok = calc.diff === 0;
+      return `
+        <div class="record-item">
+          <div class="record-main">
+            <div class="record-date">${escapeHtml(formatDateJa(record.date))}</div>
+            <div class="record-small">
+              売上 ${yen(calc.sales)} / 差異 ${yen(calc.diff)}
+            </div>
+          </div>
+          <span class="badge ${ok ? "badge-ok" : "badge-ng"}">${ok ? "OK" : "差異あり"}</span>
+          <button class="detail-btn" data-open-id="${record.id}">詳細</button>
+        </div>
+      `;
+    }
+
+    function bindRecordButtons(root) {
+      root.querySelectorAll("[data-open-id]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.dataset.openId;
+          const record = records.find((r) => r.id === id);
+          if (!record) return;
+          state = clone(record);
+          setFormFromState();
+          renderAll();
+          switchTab("home");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          showToast("詳細を開きました");
+        });
+      });
+    }
+
+    function setFormFromState() {
+      els.workDate.value = state.date || todayISO();
+      els.startTime.value = state.startTime || "";
+      els.endTime.value = state.endTime || "";
+      els.memo.value = state.memo || "";
+
+      SECTIONS.forEach((section) => {
+        section.denoms.forEach((denom) => {
+          const input = document.getElementById(`${section.key}-${denom.value}`);
+          if (input) input.value = getCount(section.key, denom.value);
+        });
+      });
+    }
+
+    function saveCurrentRecord() {
+      syncStateFromForm();
+
+      const now = new Date().toISOString();
+
+      if (!state.id) {
+        state.id = createId();
+        state.createdAt = now;
+      }
+
+      state.updatedAt = now;
+
+      const index = records.findIndex((r) => r.id === state.id);
+      if (index >= 0) {
+        records[index] = clone(state);
+      } else {
+        records.push(clone(state));
+      }
+
+      saveRecords();
+      renderAll();
+      showToast("保存しました");
+    }
+
+    function deleteCurrentRecord() {
+      if (!state.id) {
+        showToast("まだ保存されていない記録です");
+        return;
+      }
+
+      if (!confirm("この記録を削除しますか？")) return;
+
+      records = records.filter((r) => r.id !== state.id);
+      saveRecords();
+
+      state = createEmptyState();
+      setFormFromState();
+      renderAll();
+      showToast("削除しました");
+    }
+
+    function updateDeleteButton() {
+      els.deleteBtn.disabled = !state.id;
+      els.deleteBtn.style.opacity = state.id ? "1" : ".45";
+    }
+
+    function syncStateFromForm() {
+      state.date = els.workDate.value || todayISO();
+      state.startTime = els.startTime.value || "";
+      state.endTime = els.endTime.value || "";
+      state.memo = els.memo.value || "";
+    }
+
+    function calculate() {
+      return calculateRecord(state);
+    }
+
+    function calculateRecord(record) {
+      const start = totalSectionFromRecord(record, "start");
+      const received = totalSectionFromRecord(record, "received");
+      const change = totalSectionFromRecord(record, "change");
+      const tips = totalSectionFromRecord(record, "tips");
+      const end = totalSectionFromRecord(record, "end");
+
+      const sales = received - change + tips;
+      const expectedEnd = start + sales;
+      const diff = end - expectedEnd;
+
+      return {
+        start,
+        received,
+        change,
+        tips,
+        sales,
+        expectedEnd,
+        end,
+        diff
+      };
+    }
+
+    function totalSection(sectionKey) {
+      return totalSectionFromRecord(state, sectionKey);
+    }
+
+    function totalSectionFromRecord(record, sectionKey) {
+      const section = SECTIONS.find((s) => s.key === sectionKey);
+      if (!section) return 0;
+
+      return section.denoms.reduce((sum, denom) => {
+        const count = Number(record?.counts?.[sectionKey]?.[denom.value] || 0);
+        return sum + count * denom.value;
+      }, 0);
+    }
+
+    function setCount(sectionKey, denomValue, value) {
+      if (!state.counts[sectionKey]) state.counts[sectionKey] = {};
+      const num = Math.max(0, Math.floor(Number(value || 0)));
+      state.counts[sectionKey][String(denomValue)] = Number.isFinite(num) ? num : 0;
+    }
+
+    function getCount(sectionKey, denomValue) {
+      return Number(state?.counts?.[sectionKey]?.[String(denomValue)] || 0);
+    }
+
+    function createEmptyState() {
+      const counts = {};
+      SECTIONS.forEach((section) => {
+        counts[section.key] = {};
+        section.denoms.forEach((denom) => {
+          counts[section.key][String(denom.value)] = 0;
+        });
+      });
+
+      return {
+        id: "",
+        date: todayISO(),
+        startTime: "",
+        endTime: "",
+        memo: "",
+        counts,
+        createdAt: "",
+        updatedAt: ""
+      };
+    }
+
+    function loadRecords() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(normalizeRecord);
+      } catch (e) {
+        console.error(e);
+        return [];
+      }
+    }
+
+    function saveRecords() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    function normalizeRecord(record) {
+      const base = createEmptyState();
+      const merged = {
+        ...base,
+        ...record,
+        counts: {
+          ...base.counts,
+          ...(record.counts || {})
+        }
+      };
+
+      SECTIONS.forEach((section) => {
+        merged.counts[section.key] = {
+          ...base.counts[section.key],
+          ...(record?.counts?.[section.key] || {})
+        };
+      });
+
+      if (!merged.id) merged.id = createId();
+      if (!merged.date) merged.date = todayISO();
+
+      return merged;
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tab === tabName);
+      });
+
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.classList.remove("active");
+      });
+
+      const target = document.getElementById(`tab-${tabName}`);
+      if (target) target.classList.add("active");
+    }
+
+    function exportJson() {
+      const data = {
+        app: "cash-balance-app",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        records
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json"
+      });
+
+      downloadBlob(blob, `cash-balance-backup-${todayISO()}.json`);
+      showToast("JSONを書き出しました");
+    }
+
+    function exportCsv() {
+      const header = [
+        "日付",
+        "開始時刻",
+        "終了時刻",
+        "開始時金額",
+        "受取金額",
+        "おつり",
+        "チップ",
+        "現金売上",
+        "理論上終了金額",
+        "実際終了金額",
+        "差異",
+        "メモ"
+      ];
+
+      const rows = records
+        .slice()
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+        .map((record) => {
+          const calc = calculateRecord(record);
+          return [
+            record.date,
+            record.startTime || "",
+            record.endTime || "",
+            calc.start,
+            calc.received,
+            calc.change,
+            calc.tips,
+            calc.sales,
+            calc.expectedEnd,
+            calc.end,
+            calc.diff,
+            record.memo || ""
+          ];
+        });
+
+      const csv = [header, ...rows]
+        .map((row) => row.map(csvCell).join(","))
+        .join("\n");
+
+      const blob = new Blob(["\ufeff" + csv], {
+        type: "text/csv;charset=utf-8"
+      });
+
+      downloadBlob(blob, `cash-balance-${todayISO()}.csv`);
+      showToast("CSVを書き出しました");
+    }
+
+    function importJson(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result || ""));
+          const imported = Array.isArray(parsed) ? parsed : parsed.records;
+
+          if (!Array.isArray(imported)) {
+            alert("読み込めるJSON形式ではありません。");
+            return;
+          }
+
+          const normalized = imported.map(normalizeRecord);
+
+          if (!confirm(`${normalized.length}件のデータを読み込みます。現在のデータに追加しますか？`)) {
+            return;
+          }
+
+          const map = new Map(records.map((r) => [r.id, r]));
+          normalized.forEach((r) => map.set(r.id, r));
+          records = Array.from(map.values());
+          saveRecords();
+          renderAll();
+          showToast("読み込みました");
+        } catch (e) {
+          console.error(e);
+          alert("JSONの読み込みに失敗しました。");
+        } finally {
+          els.importFile.value = "";
+        }
+      };
+
+      reader.readAsText(file);
+    }
+
+    function clearAllData() {
+      if (!confirm("全データを削除します。よろしいですか？")) return;
+      if (!confirm("本当に削除しますか？この操作は戻せません。")) return;
+
+      records = [];
+      saveRecords();
+      state = createEmptyState();
+      setFormFromState();
+      renderAll();
+      showToast("全データを削除しました");
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function csvCell(value) {
+      const text = String(value ?? "");
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function yen(value) {
+      return new Intl.NumberFormat("ja-JP", {
+        style: "currency",
+        currency: "JPY",
+        maximumFractionDigits: 0
+      }).format(Number(value || 0));
+    }
+
+    function todayISO() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatDateJa(iso) {
+      if (!iso) return "";
+      const [y, m, d] = iso.split("-");
+      return `${Number(y)}年${Number(m)}月${Number(d)}日`;
+    }
+
+    function createId() {
+      return `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    let toastTimer = null;
+
+    function showToast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add("show");
+
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        els.toast.classList.remove("show");
+      }, 2200);
+    }
+  </script>
+</body>
+</html>

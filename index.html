@@ -9,45 +9,32 @@
     :root {
       --bg: #f4f5f7;
       --surface: #ffffff;
-      --surface-2: #f8fafc;
+      --surface2: #f8fafc;
       --text: #111827;
       --muted: #6b7280;
       --border: #e5e7eb;
       --primary: #111827;
-      --primary-2: #374151;
       --accent: #028760;
       --danger: #dc2626;
-      --warning: #d97706;
       --ok: #028760;
-      --shadow: 0 18px 45px rgba(15, 23, 42, .08);
-      --radius-xl: 24px;
-      --radius-lg: 18px;
-      --radius-md: 14px;
+      --warn: #d97706;
+      --shadow: 0 18px 45px rgba(15,23,42,.08);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
       background:
-        radial-gradient(circle at top left, rgba(2, 135, 96, .10), transparent 34%),
-        linear-gradient(180deg, #ffffff 0%, var(--bg) 240px, var(--bg) 100%);
+        radial-gradient(circle at top left, rgba(2,135,96,.11), transparent 34%),
+        linear-gradient(180deg, #fff 0%, var(--bg) 260px, var(--bg) 100%);
       color: var(--text);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.55;
     }
 
-    button,
-    input,
-    textarea,
-    select {
+    button, input, textarea {
       font: inherit;
     }
 
@@ -58,7 +45,7 @@
     .app {
       width: min(1100px, 100%);
       margin: 0 auto;
-      padding: 18px 14px 100px;
+      padding: 16px 14px 105px;
     }
 
     .top {
@@ -67,15 +54,15 @@
       z-index: 30;
       padding: 10px 0 12px;
       backdrop-filter: blur(18px);
-      background: rgba(244, 245, 247, .82);
+      background: rgba(244,245,247,.84);
     }
 
     .top-inner {
-      background: rgba(255,255,255,.9);
-      border: 1px solid rgba(229,231,235,.9);
-      box-shadow: 0 12px 28px rgba(15,23,42,.06);
+      background: rgba(255,255,255,.92);
+      border: 1px solid var(--border);
       border-radius: 22px;
       padding: 14px;
+      box-shadow: 0 12px 28px rgba(15,23,42,.06);
     }
 
     .brand {
@@ -86,32 +73,37 @@
       margin-bottom: 12px;
     }
 
-    .brand h1 {
+    h1 {
       margin: 0;
       font-size: 20px;
       line-height: 1.2;
-      letter-spacing: .02em;
     }
 
-    .brand p {
+    .lead {
       margin: 5px 0 0;
       color: var(--muted);
       font-size: 12px;
     }
 
-    .today-pill {
+    .status-pill {
       flex: 0 0 auto;
       display: inline-flex;
       align-items: center;
-      gap: 7px;
-      background: #ecfdf5;
-      color: #065f46;
-      border: 1px solid #bbf7d0;
+      gap: 6px;
       border-radius: 999px;
       padding: 7px 10px;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 900;
+      border: 1px solid #d1fae5;
+      color: #065f46;
+      background: #ecfdf5;
       white-space: nowrap;
+    }
+
+    .status-pill.offline {
+      border-color: #fed7aa;
+      color: #9a3412;
+      background: #fff7ed;
     }
 
     .tabs {
@@ -122,12 +114,12 @@
 
     .tab-btn {
       border: 1px solid var(--border);
-      background: var(--surface-2);
-      color: var(--primary-2);
+      background: var(--surface2);
+      color: #374151;
       border-radius: 999px;
-      padding: 10px 9px;
+      padding: 10px 8px;
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 900;
     }
 
     .tab-btn.active {
@@ -138,132 +130,64 @@
 
     .tab {
       display: none;
-      margin-top: 16px;
+      margin-top: 14px;
     }
 
     .tab.active {
       display: block;
     }
 
-    .grid {
-      display: grid;
-      gap: 12px;
-    }
-
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+    .notice {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      border-radius: 18px;
+      padding: 12px;
+      font-size: 13px;
       margin-bottom: 14px;
     }
 
-    @media (min-width: 780px) {
-      .summary-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-      }
-    }
-
-    .card {
-      background: var(--surface);
+    .login {
+      background: #fff;
       border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      box-shadow: 0 10px 22px rgba(15,23,42,.045);
-      padding: 14px;
-    }
-
-    .summary-card {
-      min-height: 96px;
-    }
-
-    .summary-card .label {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-      margin-bottom: 5px;
-    }
-
-    .summary-card .value {
-      font-size: 23px;
-      line-height: 1.15;
-      font-weight: 900;
-      letter-spacing: -.03em;
-      word-break: keep-all;
-    }
-
-    .summary-card .sub {
-      color: var(--muted);
-      font-size: 11px;
-      margin-top: 6px;
-    }
-
-    .status-ok {
-      color: var(--ok);
-    }
-
-    .status-ng {
-      color: var(--danger);
-    }
-
-    .panel {
-      background: rgba(255,255,255,.92);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-xl);
+      border-radius: 24px;
+      padding: 18px;
       box-shadow: var(--shadow);
-      padding: 16px;
-      margin-bottom: 14px;
-      overflow: hidden;
+      margin-top: 16px;
     }
 
-    .panel-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-
-    .panel-title {
-      margin: 0;
-      font-size: 17px;
-      line-height: 1.25;
-      letter-spacing: .01em;
-    }
-
-    .panel-help {
-      margin: 5px 0 0;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .section-total {
-      flex: 0 0 auto;
-      text-align: right;
-      font-weight: 900;
+    .login h2 {
+      margin: 0 0 8px;
       font-size: 20px;
-      letter-spacing: -.02em;
     }
 
-    .form-grid {
+    .login p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .login-row {
       display: grid;
       gap: 10px;
     }
 
-    @media (min-width: 740px) {
-      .form-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+    @media (min-width: 680px) {
+      .login-row {
+        grid-template-columns: 1fr auto;
+        align-items: end;
       }
     }
 
-    .field label {
+    label {
       display: block;
-      font-size: 12px;
-      font-weight: 800;
       color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
       margin-bottom: 5px;
     }
 
-    .field input,
-    .field textarea {
+    input, textarea {
       width: 100%;
       border: 1px solid var(--border);
       background: #fff;
@@ -272,15 +196,106 @@
       outline: none;
     }
 
-    .field textarea {
+    textarea {
       min-height: 46px;
       resize: vertical;
     }
 
-    .field input:focus,
-    .field textarea:focus {
-      border-color: rgba(2, 135, 96, .55);
-      box-shadow: 0 0 0 4px rgba(2, 135, 96, .10);
+    input:focus, textarea:focus {
+      border-color: rgba(2,135,96,.55);
+      box-shadow: 0 0 0 4px rgba(2,135,96,.10);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    @media (min-width: 820px) {
+      .summary-grid {
+        grid-template-columns: repeat(5, minmax(0,1fr));
+      }
+    }
+
+    .card, .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 22px rgba(15,23,42,.045);
+    }
+
+    .card {
+      border-radius: 18px;
+      min-height: 96px;
+      padding: 13px;
+    }
+
+    .card .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .card .value {
+      margin-top: 4px;
+      font-size: 22px;
+      line-height: 1.15;
+      font-weight: 950;
+      letter-spacing: -.04em;
+      word-break: keep-all;
+    }
+
+    .card .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .panel {
+      border-radius: 24px;
+      padding: 15px;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.25;
+    }
+
+    .panel-help {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .section-total {
+      flex: 0 0 auto;
+      text-align: right;
+      font-size: 20px;
+      font-weight: 950;
+      letter-spacing: -.03em;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    @media (min-width: 760px) {
+      .form-grid {
+        grid-template-columns: repeat(4, minmax(0,1fr));
+      }
     }
 
     .money-list {
@@ -288,9 +303,9 @@
       gap: 8px;
     }
 
-    @media (min-width: 760px) {
+    @media (min-width: 780px) {
       .money-list {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0,1fr));
       }
     }
 
@@ -299,19 +314,15 @@
       grid-template-columns: 1fr 44px 82px 44px;
       gap: 8px;
       align-items: center;
-      background: var(--surface-2);
+      background: var(--surface2);
       border: 1px solid #eef2f7;
       border-radius: 16px;
       padding: 9px;
     }
 
-    .denom {
-      min-width: 0;
-    }
-
     .denom-name {
-      font-weight: 900;
       font-size: 15px;
+      font-weight: 950;
       line-height: 1.15;
     }
 
@@ -321,36 +332,23 @@
       margin-top: 3px;
     }
 
-    .count-btn {
-      width: 44px;
+    .count-btn, .count-input {
+      width: 100%;
       height: 42px;
       border: 1px solid var(--border);
       border-radius: 14px;
       background: #fff;
+      text-align: center;
       font-size: 18px;
-      font-weight: 900;
-      color: var(--primary);
+      font-weight: 950;
     }
 
-    .count-btn:active {
-      transform: scale(.98);
+    .count-btn {
+      width: 44px;
     }
 
     .count-input {
       width: 82px;
-      height: 42px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      text-align: center;
-      font-size: 18px;
-      font-weight: 900;
-      outline: none;
-      background: #fff;
-    }
-
-    .count-input:focus {
-      border-color: rgba(2, 135, 96, .55);
-      box-shadow: 0 0 0 4px rgba(2, 135, 96, .10);
     }
 
     .actions {
@@ -360,9 +358,9 @@
       margin: 14px 0;
     }
 
-    @media (min-width: 620px) {
+    @media (min-width: 700px) {
       .actions {
-        grid-template-columns: 1.4fr 1fr 1fr;
+        grid-template-columns: 1.5fr 1fr 1fr;
       }
     }
 
@@ -370,7 +368,7 @@
       border: 0;
       border-radius: 16px;
       padding: 13px 14px;
-      font-weight: 900;
+      font-weight: 950;
       box-shadow: 0 10px 20px rgba(15,23,42,.08);
     }
 
@@ -396,16 +394,6 @@
       background: var(--danger);
     }
 
-    .notice {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      color: #92400e;
-      border-radius: 18px;
-      padding: 12px;
-      font-size: 13px;
-      margin-bottom: 14px;
-    }
-
     .record-list {
       display: grid;
       gap: 10px;
@@ -427,7 +415,7 @@
     }
 
     .record-date {
-      font-weight: 900;
+      font-weight: 950;
       font-size: 15px;
     }
 
@@ -438,12 +426,12 @@
     }
 
     .badge {
+      flex: 0 0 auto;
       display: inline-flex;
-      align-items: center;
       border-radius: 999px;
       padding: 5px 9px;
       font-size: 12px;
-      font-weight: 900;
+      font-weight: 950;
       white-space: nowrap;
     }
 
@@ -462,11 +450,11 @@
     .detail-btn {
       flex: 0 0 auto;
       border: 1px solid var(--border);
-      background: var(--surface-2);
+      background: var(--surface2);
       border-radius: 999px;
       padding: 9px 12px;
       font-size: 12px;
-      font-weight: 900;
+      font-weight: 950;
     }
 
     .empty {
@@ -478,41 +466,9 @@
       background: rgba(255,255,255,.65);
     }
 
-    .backup-box {
-      display: grid;
-      gap: 10px;
-    }
-
-    .file-input {
-      width: 100%;
-      padding: 12px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-    }
-
-    .toast {
-      position: fixed;
-      left: 50%;
-      bottom: calc(18px + var(--safe-bottom));
-      transform: translateX(-50%) translateY(20px);
-      z-index: 100;
-      width: min(92vw, 430px);
-      background: #111827;
-      color: #fff;
-      border-radius: 16px;
-      padding: 13px 15px;
-      font-weight: 800;
-      box-shadow: 0 20px 45px rgba(0,0,0,.22);
-      opacity: 0;
-      pointer-events: none;
-      transition: .22s ease;
-      text-align: center;
-    }
-
-    .toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
+    .small-text {
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .bottom-summary {
@@ -530,21 +486,17 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
-      background: rgba(17, 24, 39, .96);
+      background: rgba(17,24,39,.96);
       color: #fff;
       border-radius: 20px;
       padding: 10px;
       box-shadow: 0 18px 45px rgba(15,23,42,.26);
     }
 
-    .bottom-card {
-      padding: 5px 8px;
-    }
-
     .bottom-label {
       color: rgba(255,255,255,.68);
       font-size: 11px;
-      font-weight: 800;
+      font-weight: 900;
     }
 
     .bottom-value {
@@ -553,18 +505,35 @@
       letter-spacing: -.03em;
     }
 
+    .status-ok { color: var(--ok); }
+    .status-ng { color: var(--danger); }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(90px + var(--safe-bottom));
+      transform: translateX(-50%) translateY(18px);
+      z-index: 100;
+      width: min(92vw, 430px);
+      background: #111827;
+      color: #fff;
+      border-radius: 16px;
+      padding: 13px 15px;
+      font-weight: 900;
+      box-shadow: 0 20px 45px rgba(0,0,0,.22);
+      opacity: 0;
+      pointer-events: none;
+      transition: .22s ease;
+      text-align: center;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
     .hidden {
       display: none !important;
-    }
-
-    .danger-zone {
-      border-color: #fecaca;
-      background: #fff7f7;
-    }
-
-    .small-text {
-      color: var(--muted);
-      font-size: 12px;
     }
   </style>
 </head>
@@ -576,12 +545,12 @@
         <div class="brand">
           <div>
             <h1>現金精算アプリ</h1>
-            <p>開始時・終了時の現金差異をすぐ確認</p>
+            <p class="lead">Cloudflare D1同期版 / 3端末対応</p>
           </div>
-          <div class="today-pill" id="todayPill">今日</div>
+          <div class="status-pill offline" id="syncStatus">未接続</div>
         </div>
 
-        <nav class="tabs" aria-label="メニュー">
+        <nav class="tabs">
           <button class="tab-btn active" data-tab="home">ホーム</button>
           <button class="tab-btn" data-tab="history">履歴</button>
           <button class="tab-btn" data-tab="backup">保存/出力</button>
@@ -589,31 +558,51 @@
       </div>
     </header>
 
-    <main>
+    <section class="login" id="loginBox">
+      <h2>PINを入力してください</h2>
+      <p>
+        Cloudflare Pages の環境変数 <strong>APP_PIN</strong> に設定した文字を入力します。
+        3端末すべて同じPINでログインすると、同じデータを共有できます。
+      </p>
+      <div class="login-row">
+        <div>
+          <label for="pinInput">APP_PIN</label>
+          <input id="pinInput" type="password" placeholder="例：cash2026mizuno" autocomplete="current-password" />
+        </div>
+        <button class="btn btn-primary" id="loginBtn">接続する</button>
+      </div>
+    </section>
+
+    <main id="appMain" class="hidden">
       <section class="tab active" id="tab-home">
         <div class="notice">
           <strong>計算式：</strong>
-          終了時の理論金額 = 開始時 + 受け取った金額 - おつり + チップ。
+          理論上の終了金額 = 開始時 + 受取 + チップ + 両替・追加。
           差異が0円ならOKです。
         </div>
 
         <div class="summary-grid">
-          <div class="card summary-card">
+          <div class="card">
             <div class="label">開始時</div>
             <div class="value" id="sumStart">¥0</div>
             <div class="sub">最初に持っていた現金</div>
           </div>
-          <div class="card summary-card">
+          <div class="card">
+            <div class="label">受取</div>
+            <div class="value" id="sumReceived">¥0</div>
+            <div class="sub">お客様から受け取った現金</div>
+          </div>
+          <div class="card">
             <div class="label">現金売上</div>
             <div class="value" id="sumSales">¥0</div>
-            <div class="sub">受取 − おつり + チップ</div>
+            <div class="sub">受取 + チップ</div>
           </div>
-          <div class="card summary-card">
+          <div class="card">
             <div class="label">終了時</div>
             <div class="value" id="sumEnd">¥0</div>
             <div class="sub">最後に数えた現金</div>
           </div>
-          <div class="card summary-card">
+          <div class="card">
             <div class="label">差異</div>
             <div class="value" id="sumDiff">¥0</div>
             <div class="sub" id="sumDiffHelp">差異なし</div>
@@ -623,27 +612,27 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">基本情報</h2>
-              <p class="panel-help">日付・開始時刻・終了時刻を記録できます。</p>
+              <h2>基本情報</h2>
+              <div class="panel-help">日付・開始時刻・終了時刻を記録できます。</div>
             </div>
           </div>
 
           <div class="form-grid">
-            <div class="field">
+            <div>
               <label for="workDate">日付</label>
               <input id="workDate" type="date" />
             </div>
-            <div class="field">
+            <div>
               <label for="startTime">開始時刻</label>
               <input id="startTime" type="time" />
             </div>
-            <div class="field">
+            <div>
               <label for="endTime">終了時刻</label>
               <input id="endTime" type="time" />
             </div>
-            <div class="field">
+            <div>
               <label for="memo">メモ</label>
-              <textarea id="memo" placeholder="例：夜稼働 / 雨 / 現金多め"></textarea>
+              <textarea id="memo" placeholder="例：夜稼働 / 雨 / 両替あり"></textarea>
             </div>
           </div>
         </section>
@@ -651,7 +640,7 @@
         <div id="moneySections"></div>
 
         <div class="actions">
-          <button class="btn btn-primary" id="saveBtn">この内容を保存</button>
+          <button class="btn btn-primary" id="saveBtn">この内容を保存・同期</button>
           <button class="btn btn-light" id="newBtn">新規入力</button>
           <button class="btn btn-danger" id="deleteBtn">この記録を削除</button>
         </div>
@@ -659,8 +648,8 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">本日の記録</h2>
-              <p class="panel-help">ホームには今日の記録だけ表示します。</p>
+              <h2>本日の記録</h2>
+              <div class="panel-help">ホームには今日の記録だけ表示します。</div>
             </div>
           </div>
           <div id="todayList" class="record-list"></div>
@@ -671,8 +660,8 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">履歴</h2>
-              <p class="panel-help">過去のデータは日付リストで表示します。詳細を押すとホーム画面で確認できます。</p>
+              <h2>履歴</h2>
+              <div class="panel-help">詳細を押すとホーム画面で確認・編集できます。</div>
             </div>
           </div>
           <div id="historyList" class="record-list"></div>
@@ -683,47 +672,33 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">保存 / 出力</h2>
-              <p class="panel-help">スマホからPCへ移したい場合は、JSONを書き出して読み込めます。</p>
+              <h2>保存 / 出力</h2>
+              <div class="panel-help">データはCloudflare D1に保存されます。CSVやJSONでも出力できます。</div>
             </div>
           </div>
 
-          <div class="backup-box">
-            <button class="btn btn-dark" id="exportJsonBtn">JSONバックアップを書き出す</button>
-            <button class="btn btn-light" id="exportCsvBtn">CSVで書き出す</button>
-
-            <div class="field">
-              <label for="importFile">JSONバックアップを読み込む</label>
-              <input class="file-input" id="importFile" type="file" accept="application/json,.json" />
-            </div>
-
-            <p class="small-text">
-              ※ このアプリは無料で使えるように、サーバーを使わずブラウザ内に保存します。
-              機種変更・ブラウザ変更・キャッシュ削除の前にバックアップしてください。
-            </p>
+          <div class="actions">
+            <button class="btn btn-dark" id="reloadBtn">最新データを読み込む</button>
+            <button class="btn btn-light" id="exportJsonBtn">JSONバックアップ</button>
+            <button class="btn btn-light" id="exportCsvBtn">CSV出力</button>
           </div>
-        </section>
 
-        <section class="panel danger-zone">
-          <div class="panel-head">
-            <div>
-              <h2 class="panel-title">危険な操作</h2>
-              <p class="panel-help">全データを削除します。バックアップ後に行ってください。</p>
-            </div>
-          </div>
-          <button class="btn btn-danger" id="clearAllBtn">全データを削除</button>
+          <p class="small-text">
+            ※ 10秒ごとに自動で最新データを読み込みます。別端末で保存した内容もここに反映されます。
+          </p>
+          <button class="btn btn-danger" id="logoutBtn">PINを解除してログアウト</button>
         </section>
       </section>
     </main>
   </div>
 
-  <div class="bottom-summary" aria-live="polite">
+  <div class="bottom-summary" id="bottomBox">
     <div class="bottom-inner">
-      <div class="bottom-card">
+      <div>
         <div class="bottom-label">理論上の終了金額</div>
         <div class="bottom-value" id="bottomExpected">¥0</div>
       </div>
-      <div class="bottom-card">
+      <div>
         <div class="bottom-label">差異</div>
         <div class="bottom-value" id="bottomDiff">¥0</div>
       </div>
@@ -733,7 +708,9 @@
   <div class="toast" id="toast">保存しました</div>
 
   <script>
-    const STORAGE_KEY = "cash_balance_app_v1";
+    const API_URL = "/api/records";
+    const PIN_KEY = "cash_balance_app_pin_v2";
+    const SYNC_INTERVAL_MS = 10000;
 
     const DENOMS_ALL = [
       { value: 10000, label: "1万円札" },
@@ -771,9 +748,9 @@
         denoms: DENOMS_ALL
       },
       {
-        key: "change",
-        title: "③ おつりで返した金額",
-        help: "お客様へ返したおつりを金種ごとに入力します。",
+        key: "exchange",
+        title: "③ 両替・追加した金額",
+        help: "途中で追加した現金や両替で増えた現金を入力します。売上には含めません。",
         denoms: DENOMS_ALL
       },
       {
@@ -790,11 +767,19 @@
       }
     ];
 
-    let records = loadRecords();
+    let records = [];
     let state = createEmptyState();
+    let appPin = localStorage.getItem(PIN_KEY) || "";
+    let syncTimer = null;
+    let isLoading = false;
 
     const els = {
-      todayPill: document.getElementById("todayPill"),
+      loginBox: document.getElementById("loginBox"),
+      appMain: document.getElementById("appMain"),
+      pinInput: document.getElementById("pinInput"),
+      loginBtn: document.getElementById("loginBtn"),
+      syncStatus: document.getElementById("syncStatus"),
+
       workDate: document.getElementById("workDate"),
       startTime: document.getElementById("startTime"),
       endTime: document.getElementById("endTime"),
@@ -802,6 +787,7 @@
       moneySections: document.getElementById("moneySections"),
 
       sumStart: document.getElementById("sumStart"),
+      sumReceived: document.getElementById("sumReceived"),
       sumSales: document.getElementById("sumSales"),
       sumEnd: document.getElementById("sumEnd"),
       sumDiff: document.getElementById("sumDiff"),
@@ -816,26 +802,46 @@
       todayList: document.getElementById("todayList"),
       historyList: document.getElementById("historyList"),
 
+      reloadBtn: document.getElementById("reloadBtn"),
       exportJsonBtn: document.getElementById("exportJsonBtn"),
       exportCsvBtn: document.getElementById("exportCsvBtn"),
-      importFile: document.getElementById("importFile"),
-      clearAllBtn: document.getElementById("clearAllBtn"),
+      logoutBtn: document.getElementById("logoutBtn"),
       toast: document.getElementById("toast")
     };
 
     init();
 
     function init() {
-      els.todayPill.textContent = formatDateJa(todayISO());
       renderMoneySections();
       bindEvents();
       setFormFromState();
       renderAll();
+
+      if (appPin) {
+        els.pinInput.value = appPin;
+        unlockApp();
+      }
     }
 
     function bindEvents() {
       document.querySelectorAll(".tab-btn").forEach((btn) => {
         btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      });
+
+      els.loginBtn.addEventListener("click", () => {
+        const pin = els.pinInput.value.trim();
+        if (!pin) {
+          showToast("PINを入力してください");
+          return;
+        }
+
+        appPin = pin;
+        localStorage.setItem(PIN_KEY, appPin);
+        unlockApp();
+      });
+
+      els.pinInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") els.loginBtn.click();
       });
 
       els.workDate.addEventListener("input", () => {
@@ -856,6 +862,7 @@
       });
 
       els.saveBtn.addEventListener("click", saveCurrentRecord);
+
       els.newBtn.addEventListener("click", () => {
         if (!confirm("入力中の内容をクリアして新規入力にしますか？")) return;
         state = createEmptyState();
@@ -866,11 +873,163 @@
       });
 
       els.deleteBtn.addEventListener("click", deleteCurrentRecord);
-
+      els.reloadBtn.addEventListener("click", () => fetchRecords(true));
       els.exportJsonBtn.addEventListener("click", exportJson);
       els.exportCsvBtn.addEventListener("click", exportCsv);
-      els.importFile.addEventListener("change", importJson);
-      els.clearAllBtn.addEventListener("click", clearAllData);
+
+      els.logoutBtn.addEventListener("click", () => {
+        if (!confirm("この端末のPINを削除してログアウトしますか？")) return;
+        localStorage.removeItem(PIN_KEY);
+        appPin = "";
+        records = [];
+        state = createEmptyState();
+        stopSync();
+        els.appMain.classList.add("hidden");
+        els.loginBox.classList.remove("hidden");
+        els.pinInput.value = "";
+        setSyncStatus(false, "未接続");
+        renderAll();
+      });
+    }
+
+    function unlockApp() {
+      els.loginBox.classList.add("hidden");
+      els.appMain.classList.remove("hidden");
+      fetchRecords(true);
+      startSync();
+    }
+
+    function startSync() {
+      stopSync();
+      syncTimer = setInterval(() => {
+        fetchRecords(false);
+      }, SYNC_INTERVAL_MS);
+    }
+
+    function stopSync() {
+      if (syncTimer) clearInterval(syncTimer);
+      syncTimer = null;
+    }
+
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          "content-type": "application/json",
+          "x-app-pin": appPin,
+          ...(options.headers || {})
+        }
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || `APIエラー: ${res.status}`);
+      }
+
+      return data;
+    }
+
+    async function fetchRecords(showMessage) {
+      if (!appPin || isLoading) return;
+
+      isLoading = true;
+      setSyncStatus(false, "同期中...");
+
+      try {
+        const data = await apiFetch(`${API_URL}?limit=500`);
+        const currentId = state.id;
+
+        records = Array.isArray(data.records)
+          ? data.records.map(normalizeRecord)
+          : [];
+
+        if (currentId) {
+          const latest = records.find((r) => r.id === currentId);
+          if (latest && isRemoteNewer(latest, state)) {
+            state = clone(latest);
+            setFormFromState();
+          }
+        }
+
+        renderAll();
+        setSyncStatus(true, "同期済み");
+
+        if (showMessage) showToast("最新データを読み込みました");
+      } catch (error) {
+        console.error(error);
+        setSyncStatus(false, "同期エラー");
+        if (showMessage) alert(error.message);
+      } finally {
+        isLoading = false;
+      }
+    }
+
+    async function saveCurrentRecord() {
+      if (!appPin) {
+        showToast("PINを入力してください");
+        return;
+      }
+
+      syncStateFromForm();
+
+      if (!state.date) state.date = todayISO();
+      if (!state.id) {
+        state.id = createId();
+        state.createdAt = new Date().toISOString();
+      }
+
+      const buttonText = els.saveBtn.textContent;
+      els.saveBtn.disabled = true;
+      els.saveBtn.textContent = "保存中...";
+
+      try {
+        const data = await apiFetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({ record: state })
+        });
+
+        state = normalizeRecord(data.record);
+        const index = records.findIndex((r) => r.id === state.id);
+        if (index >= 0) records[index] = clone(state);
+        else records.push(clone(state));
+
+        setFormFromState();
+        renderAll();
+        setSyncStatus(true, "同期済み");
+        showToast("保存・同期しました");
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+        setSyncStatus(false, "同期エラー");
+      } finally {
+        els.saveBtn.disabled = false;
+        els.saveBtn.textContent = buttonText;
+      }
+    }
+
+    async function deleteCurrentRecord() {
+      if (!state.id) {
+        showToast("まだ保存されていない記録です");
+        return;
+      }
+
+      if (!confirm("この記録を削除しますか？")) return;
+
+      try {
+        await apiFetch(`${API_URL}?id=${encodeURIComponent(state.id)}`, {
+          method: "DELETE"
+        });
+
+        records = records.filter((r) => r.id !== state.id);
+        state = createEmptyState();
+        setFormFromState();
+        renderAll();
+        showToast("削除しました");
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+      }
     }
 
     function renderMoneySections() {
@@ -879,11 +1038,11 @@
           const id = `${section.key}-${denom.value}`;
           return `
             <div class="money-row">
-              <div class="denom">
+              <div>
                 <div class="denom-name">${escapeHtml(denom.label)}</div>
                 <div class="denom-sub">${yen(denom.value)} × 枚数</div>
               </div>
-              <button class="count-btn" type="button" data-action="minus" data-section="${section.key}" data-denom="${denom.value}" aria-label="${denom.label}を減らす">−</button>
+              <button class="count-btn" type="button" data-action="minus" data-section="${section.key}" data-denom="${denom.value}">−</button>
               <input
                 class="count-input"
                 id="${id}"
@@ -895,7 +1054,7 @@
                 step="1"
                 value="0"
               />
-              <button class="count-btn" type="button" data-action="plus" data-section="${section.key}" data-denom="${denom.value}" aria-label="${denom.label}を増やす">＋</button>
+              <button class="count-btn" type="button" data-action="plus" data-section="${section.key}" data-denom="${denom.value}">＋</button>
             </div>
           `;
         }).join("");
@@ -904,8 +1063,8 @@
           <section class="panel">
             <div class="panel-head">
               <div>
-                <h2 class="panel-title">${escapeHtml(section.title)}</h2>
-                <p class="panel-help">${escapeHtml(section.help)}</p>
+                <h2>${escapeHtml(section.title)}</h2>
+                <div class="panel-help">${escapeHtml(section.help)}</div>
               </div>
               <div class="section-total" id="total-${section.key}">¥0</div>
             </div>
@@ -918,15 +1077,11 @@
 
       document.querySelectorAll(".count-input").forEach((input) => {
         input.addEventListener("input", () => {
-          const section = input.dataset.section;
-          const denom = input.dataset.denom;
-          setCount(section, denom, input.value);
+          setCount(input.dataset.section, input.dataset.denom, input.value);
           renderAll();
         });
 
-        input.addEventListener("focus", () => {
-          input.select();
-        });
+        input.addEventListener("focus", () => input.select());
       });
 
       document.querySelectorAll(".count-btn").forEach((btn) => {
@@ -936,9 +1091,12 @@
           const action = btn.dataset.action;
           const current = getCount(section, denom);
           const next = action === "plus" ? current + 1 : Math.max(0, current - 1);
+
           setCount(section, denom, next);
+
           const input = document.getElementById(`${section}-${denom}`);
           if (input) input.value = next;
+
           renderAll();
         });
       });
@@ -963,9 +1121,9 @@
       const calc = calculate();
 
       els.sumStart.textContent = yen(calc.start);
+      els.sumReceived.textContent = yen(calc.received);
       els.sumSales.textContent = yen(calc.sales);
       els.sumEnd.textContent = yen(calc.end);
-
       els.sumDiff.textContent = yen(calc.diff);
       els.bottomExpected.textContent = yen(calc.expectedEnd);
       els.bottomDiff.textContent = yen(calc.diff);
@@ -986,6 +1144,7 @@
 
     function renderTodayList() {
       const today = todayISO();
+
       const list = records
         .filter((r) => r.date === today)
         .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
@@ -1011,35 +1170,22 @@
         return String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt));
       });
 
-      els.historyList.innerHTML = list.map((record) => {
-        const calc = calculateRecord(record);
-        const ok = calc.diff === 0;
-        return `
-          <div class="record-item">
-            <div class="record-main">
-              <div class="record-date">${escapeHtml(formatDateJa(record.date))}</div>
-              <div class="record-small">
-                ${escapeHtml(record.startTime || "--:--")}〜${escapeHtml(record.endTime || "--:--")}
-              </div>
-            </div>
-            <span class="badge ${ok ? "badge-ok" : "badge-ng"}">${ok ? "OK" : "差異あり"}</span>
-            <button class="detail-btn" data-open-id="${record.id}">詳細</button>
-          </div>
-        `;
-      }).join("");
-
+      els.historyList.innerHTML = list.map(recordCardHtml).join("");
       bindRecordButtons(els.historyList);
     }
 
     function recordCardHtml(record) {
       const calc = calculateRecord(record);
       const ok = calc.diff === 0;
+
       return `
         <div class="record-item">
           <div class="record-main">
             <div class="record-date">${escapeHtml(formatDateJa(record.date))}</div>
             <div class="record-small">
-              売上 ${yen(calc.sales)} / 差異 ${yen(calc.diff)}
+              ${escapeHtml(record.startTime || "--:--")}〜${escapeHtml(record.endTime || "--:--")}
+              / 売上 ${yen(calc.sales)}
+              / 差異 ${yen(calc.diff)}
             </div>
           </div>
           <span class="badge ${ok ? "badge-ok" : "badge-ng"}">${ok ? "OK" : "差異あり"}</span>
@@ -1054,6 +1200,7 @@
           const id = btn.dataset.openId;
           const record = records.find((r) => r.id === id);
           if (!record) return;
+
           state = clone(record);
           setFormFromState();
           renderAll();
@@ -1078,52 +1225,6 @@
       });
     }
 
-    function saveCurrentRecord() {
-      syncStateFromForm();
-
-      const now = new Date().toISOString();
-
-      if (!state.id) {
-        state.id = createId();
-        state.createdAt = now;
-      }
-
-      state.updatedAt = now;
-
-      const index = records.findIndex((r) => r.id === state.id);
-      if (index >= 0) {
-        records[index] = clone(state);
-      } else {
-        records.push(clone(state));
-      }
-
-      saveRecords();
-      renderAll();
-      showToast("保存しました");
-    }
-
-    function deleteCurrentRecord() {
-      if (!state.id) {
-        showToast("まだ保存されていない記録です");
-        return;
-      }
-
-      if (!confirm("この記録を削除しますか？")) return;
-
-      records = records.filter((r) => r.id !== state.id);
-      saveRecords();
-
-      state = createEmptyState();
-      setFormFromState();
-      renderAll();
-      showToast("削除しました");
-    }
-
-    function updateDeleteButton() {
-      els.deleteBtn.disabled = !state.id;
-      els.deleteBtn.style.opacity = state.id ? "1" : ".45";
-    }
-
     function syncStateFromForm() {
       state.date = els.workDate.value || todayISO();
       state.startTime = els.startTime.value || "";
@@ -1138,18 +1239,18 @@
     function calculateRecord(record) {
       const start = totalSectionFromRecord(record, "start");
       const received = totalSectionFromRecord(record, "received");
-      const change = totalSectionFromRecord(record, "change");
+      const exchange = totalSectionFromRecord(record, "exchange");
       const tips = totalSectionFromRecord(record, "tips");
       const end = totalSectionFromRecord(record, "end");
 
-      const sales = received - change + tips;
-      const expectedEnd = start + sales;
+      const sales = received + tips;
+      const expectedEnd = start + sales + exchange;
       const diff = end - expectedEnd;
 
       return {
         start,
         received,
-        change,
+        exchange,
         tips,
         sales,
         expectedEnd,
@@ -1184,6 +1285,7 @@
 
     function createEmptyState() {
       const counts = {};
+
       SECTIONS.forEach((section) => {
         counts[section.key] = {};
         section.denoms.forEach((denom) => {
@@ -1203,31 +1305,15 @@
       };
     }
 
-    function loadRecords() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed.map(normalizeRecord);
-      } catch (e) {
-        console.error(e);
-        return [];
-      }
-    }
-
-    function saveRecords() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-    }
-
     function normalizeRecord(record) {
       const base = createEmptyState();
+
       const merged = {
         ...base,
         ...record,
         counts: {
           ...base.counts,
-          ...(record.counts || {})
+          ...(record?.counts || {})
         }
       };
 
@@ -1242,6 +1328,22 @@
       if (!merged.date) merged.date = todayISO();
 
       return merged;
+    }
+
+    function updateDeleteButton() {
+      els.deleteBtn.disabled = !state.id;
+      els.deleteBtn.style.opacity = state.id ? "1" : ".45";
+    }
+
+    function setSyncStatus(ok, text) {
+      els.syncStatus.textContent = text;
+      els.syncStatus.classList.toggle("offline", !ok);
+    }
+
+    function isRemoteNewer(remote, local) {
+      if (!remote?.updatedAt) return false;
+      if (!local?.updatedAt) return true;
+      return new Date(remote.updatedAt).getTime() > new Date(local.updatedAt).getTime();
     }
 
     function switchTab(tabName) {
@@ -1259,8 +1361,8 @@
 
     function exportJson() {
       const data = {
-        app: "cash-balance-app",
-        version: 1,
+        app: "cash-balance-app-cloudflare-d1",
+        version: 2,
         exportedAt: new Date().toISOString(),
         records
       };
@@ -1280,7 +1382,7 @@
         "終了時刻",
         "開始時金額",
         "受取金額",
-        "おつり",
+        "両替追加",
         "チップ",
         "現金売上",
         "理論上終了金額",
@@ -1300,7 +1402,7 @@
             record.endTime || "",
             calc.start,
             calc.received,
-            calc.change,
+            calc.exchange,
             calc.tips,
             calc.sales,
             calc.expectedEnd,
@@ -1320,57 +1422,6 @@
 
       downloadBlob(blob, `cash-balance-${todayISO()}.csv`);
       showToast("CSVを書き出しました");
-    }
-
-    function importJson(event) {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        try {
-          const parsed = JSON.parse(String(reader.result || ""));
-          const imported = Array.isArray(parsed) ? parsed : parsed.records;
-
-          if (!Array.isArray(imported)) {
-            alert("読み込めるJSON形式ではありません。");
-            return;
-          }
-
-          const normalized = imported.map(normalizeRecord);
-
-          if (!confirm(`${normalized.length}件のデータを読み込みます。現在のデータに追加しますか？`)) {
-            return;
-          }
-
-          const map = new Map(records.map((r) => [r.id, r]));
-          normalized.forEach((r) => map.set(r.id, r));
-          records = Array.from(map.values());
-          saveRecords();
-          renderAll();
-          showToast("読み込みました");
-        } catch (e) {
-          console.error(e);
-          alert("JSONの読み込みに失敗しました。");
-        } finally {
-          els.importFile.value = "";
-        }
-      };
-
-      reader.readAsText(file);
-    }
-
-    function clearAllData() {
-      if (!confirm("全データを削除します。よろしいですか？")) return;
-      if (!confirm("本当に削除しますか？この操作は戻せません。")) return;
-
-      records = [];
-      saveRecords();
-      state = createEmptyState();
-      setFormFromState();
-      renderAll();
-      showToast("全データを削除しました");
     }
 
     function downloadBlob(blob, filename) {

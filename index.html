@@ -1,1495 +1,228 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>現金精算アプリ</title>
-  <meta name="theme-color" content="#111827" />
-  <style>
-    :root {
-      --bg: #f4f5f7;
-      --surface: #ffffff;
-      --surface2: #f8fafc;
-      --text: #111827;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --primary: #111827;
-      --accent: #028760;
-      --danger: #dc2626;
-      --ok: #028760;
-      --warn: #d97706;
-      --shadow: 0 18px 45px rgba(15,23,42,.08);
-      --safe-bottom: env(safe-area-inset-bottom, 0px);
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      background:
-        radial-gradient(circle at top left, rgba(2,135,96,.11), transparent 34%),
-        linear-gradient(180deg, #fff 0%, var(--bg) 260px, var(--bg) 100%);
-      color: var(--text);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.55;
-    }
-
-    button, input, textarea {
-      font: inherit;
-    }
-
-    button {
-      cursor: pointer;
-    }
-
-    .app {
-      width: min(1100px, 100%);
-      margin: 0 auto;
-      padding: 16px 14px 105px;
-    }
-
-    .top {
-      position: sticky;
-      top: 0;
-      z-index: 30;
-      padding: 10px 0 12px;
-      backdrop-filter: blur(18px);
-      background: rgba(244,245,247,.84);
-    }
-
-    .top-inner {
-      background: rgba(255,255,255,.92);
-      border: 1px solid var(--border);
-      border-radius: 22px;
-      padding: 14px;
-      box-shadow: 0 12px 28px rgba(15,23,42,.06);
-    }
-
-    .brand {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: flex-start;
-      margin-bottom: 12px;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: 20px;
-      line-height: 1.2;
-    }
-
-    .lead {
-      margin: 5px 0 0;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .status-pill {
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border-radius: 999px;
-      padding: 7px 10px;
-      font-size: 12px;
-      font-weight: 900;
-      border: 1px solid #d1fae5;
-      color: #065f46;
-      background: #ecfdf5;
-      white-space: nowrap;
-    }
-
-    .status-pill.offline {
-      border-color: #fed7aa;
-      color: #9a3412;
-      background: #fff7ed;
-    }
-
-    .tabs {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-
-    .tab-btn {
-      border: 1px solid var(--border);
-      background: var(--surface2);
-      color: #374151;
-      border-radius: 999px;
-      padding: 10px 8px;
-      font-size: 13px;
-      font-weight: 900;
-    }
-
-    .tab-btn.active {
-      background: var(--primary);
-      color: #fff;
-      border-color: var(--primary);
-    }
-
-    .tab {
-      display: none;
-      margin-top: 14px;
-    }
-
-    .tab.active {
-      display: block;
-    }
-
-    .notice {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      color: #92400e;
-      border-radius: 18px;
-      padding: 12px;
-      font-size: 13px;
-      margin-bottom: 14px;
-    }
-
-    .login {
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 18px;
-      box-shadow: var(--shadow);
-      margin-top: 16px;
-    }
-
-    .login h2 {
-      margin: 0 0 8px;
-      font-size: 20px;
-    }
-
-    .login p {
-      margin: 0 0 14px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .login-row {
-      display: grid;
-      gap: 10px;
-    }
-
-    @media (min-width: 680px) {
-      .login-row {
-        grid-template-columns: 1fr auto;
-        align-items: end;
-      }
-    }
-
-    label {
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 900;
-      margin-bottom: 5px;
-    }
-
-    input, textarea {
-      width: 100%;
-      border: 1px solid var(--border);
-      background: #fff;
-      border-radius: 14px;
-      padding: 12px;
-      outline: none;
-    }
-
-    textarea {
-      min-height: 46px;
-      resize: vertical;
-    }
-
-    input:focus, textarea:focus {
-      border-color: rgba(2,135,96,.55);
-      box-shadow: 0 0 0 4px rgba(2,135,96,.10);
-    }
-
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0,1fr));
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    @media (min-width: 820px) {
-      .summary-grid {
-        grid-template-columns: repeat(5, minmax(0,1fr));
-      }
-    }
-
-    .card, .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      box-shadow: 0 10px 22px rgba(15,23,42,.045);
-    }
-
-    .card {
-      border-radius: 18px;
-      min-height: 96px;
-      padding: 13px;
-    }
-
-    .card .label {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 900;
-    }
-
-    .card .value {
-      margin-top: 4px;
-      font-size: 22px;
-      line-height: 1.15;
-      font-weight: 950;
-      letter-spacing: -.04em;
-      word-break: keep-all;
-    }
-
-    .card .sub {
-      margin-top: 6px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .panel {
-      border-radius: 24px;
-      padding: 15px;
-      margin-bottom: 14px;
-      overflow: hidden;
-    }
-
-    .panel-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: flex-start;
-      margin-bottom: 12px;
-    }
-
-    .panel h2 {
-      margin: 0;
-      font-size: 17px;
-      line-height: 1.25;
-    }
-
-    .panel-help {
-      margin-top: 5px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .section-total {
-      flex: 0 0 auto;
-      text-align: right;
-      font-size: 20px;
-      font-weight: 950;
-      letter-spacing: -.03em;
-    }
-
-    .form-grid {
-      display: grid;
-      gap: 10px;
-    }
-
-    @media (min-width: 760px) {
-      .form-grid {
-        grid-template-columns: repeat(4, minmax(0,1fr));
-      }
-    }
-
-    .money-list {
-      display: grid;
-      gap: 8px;
-    }
-
-    @media (min-width: 780px) {
-      .money-list {
-        grid-template-columns: repeat(2, minmax(0,1fr));
-      }
-    }
-
-    .money-row {
-      display: grid;
-      grid-template-columns: 1fr 44px 82px 44px;
-      gap: 8px;
-      align-items: center;
-      background: var(--surface2);
-      border: 1px solid #eef2f7;
-      border-radius: 16px;
-      padding: 9px;
-    }
-
-    .denom-name {
-      font-size: 15px;
-      font-weight: 950;
-      line-height: 1.15;
-    }
-
-    .denom-sub {
-      color: var(--muted);
-      font-size: 11px;
-      margin-top: 3px;
-    }
-
-    .count-btn, .count-input {
-      width: 100%;
-      height: 42px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: #fff;
-      text-align: center;
-      font-size: 18px;
-      font-weight: 950;
-    }
-
-    .count-btn {
-      width: 44px;
-    }
-
-    .count-input {
-      width: 82px;
-    }
-
-    .actions {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-      margin: 14px 0;
-    }
-
-    @media (min-width: 700px) {
-      .actions {
-        grid-template-columns: 1.5fr 1fr 1fr;
-      }
-    }
-
-    .btn {
-      border: 0;
-      border-radius: 16px;
-      padding: 13px 14px;
-      font-weight: 950;
-      box-shadow: 0 10px 20px rgba(15,23,42,.08);
-    }
-
-    .btn-primary {
-      color: #fff;
-      background: var(--accent);
-    }
-
-    .btn-dark {
-      color: #fff;
-      background: var(--primary);
-    }
-
-    .btn-light {
-      color: var(--primary);
-      background: #fff;
-      border: 1px solid var(--border);
-      box-shadow: none;
-    }
-
-    .btn-danger {
-      color: #fff;
-      background: var(--danger);
-    }
-
-    .record-list {
-      display: grid;
-      gap: 10px;
-    }
-
-    .record-item {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: center;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 13px;
-    }
-
-    .record-main {
-      min-width: 0;
-    }
-
-    .record-date {
-      font-weight: 950;
-      font-size: 15px;
-    }
-
-    .record-small {
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 3px;
-    }
-
-    .badge {
-      flex: 0 0 auto;
-      display: inline-flex;
-      border-radius: 999px;
-      padding: 5px 9px;
-      font-size: 12px;
-      font-weight: 950;
-      white-space: nowrap;
-    }
-
-    .badge-ok {
-      color: #065f46;
-      background: #ecfdf5;
-      border: 1px solid #bbf7d0;
-    }
-
-    .badge-ng {
-      color: #991b1b;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-    }
-
-    .detail-btn {
-      flex: 0 0 auto;
-      border: 1px solid var(--border);
-      background: var(--surface2);
-      border-radius: 999px;
-      padding: 9px 12px;
-      font-size: 12px;
-      font-weight: 950;
-    }
-
-    .empty {
-      color: var(--muted);
-      text-align: center;
-      border: 1px dashed #cbd5e1;
-      border-radius: 18px;
-      padding: 22px;
-      background: rgba(255,255,255,.65);
-    }
-
-    .small-text {
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .bottom-summary {
-      position: fixed;
-      left: 50%;
-      bottom: 0;
-      z-index: 25;
-      transform: translateX(-50%);
-      width: min(1100px, 100%);
-      padding: 10px 14px calc(10px + var(--safe-bottom));
-      background: linear-gradient(180deg, rgba(244,245,247,0), rgba(244,245,247,.98) 18%);
-    }
-
-    .bottom-inner {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      background: rgba(17,24,39,.96);
-      color: #fff;
-      border-radius: 20px;
-      padding: 10px;
-      box-shadow: 0 18px 45px rgba(15,23,42,.26);
-    }
-
-    .bottom-label {
-      color: rgba(255,255,255,.68);
-      font-size: 11px;
-      font-weight: 900;
-    }
-
-    .bottom-value {
-      font-size: 18px;
-      font-weight: 950;
-      letter-spacing: -.03em;
-    }
-
-    .status-ok { color: var(--ok); }
-    .status-ng { color: var(--danger); }
-
-    .toast {
-      position: fixed;
-      left: 50%;
-      bottom: calc(90px + var(--safe-bottom));
-      transform: translateX(-50%) translateY(18px);
-      z-index: 100;
-      width: min(92vw, 430px);
-      background: #111827;
-      color: #fff;
-      border-radius: 16px;
-      padding: 13px 15px;
-      font-weight: 900;
-      box-shadow: 0 20px 45px rgba(0,0,0,.22);
-      opacity: 0;
-      pointer-events: none;
-      transition: .22s ease;
-      text-align: center;
-    }
-
-    .toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    .hidden {
-      display: none !important;
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>現金精算アプリ</title>
+<meta name="theme-color" content="#111827">
+<style>
+:root{--bg:#f4f7f6;--surface:#fff;--surface2:#f8fafc;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--primary:#111827;--accent:#028760;--danger:#dc2626;--warn:#d97706;--ok:#028760;--shadow:0 18px 45px rgba(15,23,42,.08);--safe:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:linear-gradient(180deg,#eef7f3 0,#f6f7f9 280px,#f6f7f9 100%);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55}button,input,textarea{font:inherit}button{cursor:pointer}.app{width:min(1100px,100%);margin:0 auto;padding:14px 14px 168px}.top{position:sticky;top:0;z-index:30;padding:8px 0 10px;background:rgba(246,247,249,.84);backdrop-filter:blur(18px)}.topin{background:rgba(255,255,255,.94);border:1px solid var(--border);border-radius:22px;padding:14px;box-shadow:0 12px 28px rgba(15,23,42,.06)}.brand{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.brand h1{margin:0;font-size:20px;line-height:1.2}.lead{margin:5px 0 0;color:var(--muted);font-size:12px}.pill{display:inline-flex;align-items:center;border-radius:999px;padding:7px 10px;font-size:12px;font-weight:900;border:1px solid #fed7aa;color:#9a3412;background:#fff7ed;white-space:nowrap}.pill.ok{border-color:#bbf7d0;color:#065f46;background:#ecfdf5}.topactions{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;margin-top:12px}.btn{border:0;border-radius:16px;padding:12px 13px;font-weight:950;box-shadow:0 10px 20px rgba(15,23,42,.08)}.btn-primary{color:#fff;background:var(--accent)}.btn-dark{color:#fff;background:var(--primary)}.btn-light{color:var(--primary);background:#fff;border:1px solid var(--border);box-shadow:none}.btn-danger{color:#fff;background:var(--danger)}.btn-soft-danger{color:#991b1b;background:#f3a2a6}.notice{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:18px;padding:12px;font-size:13px;margin:14px 0}.login{background:#fff;border:1px solid var(--border);border-radius:24px;padding:18px;box-shadow:var(--shadow);margin-top:16px}.login h2{margin:0 0 8px;font-size:20px}.login p{margin:0 0 14px;color:var(--muted);font-size:13px}.loginrow{display:grid;gap:10px}@media(min-width:680px){.loginrow{grid-template-columns:1fr auto;align-items:end}}label{display:block;color:var(--muted);font-size:12px;font-weight:900;margin-bottom:5px}input,textarea{width:100%;border:1px solid var(--border);background:#fff;border-radius:14px;padding:12px;outline:none}textarea{min-height:48px;resize:vertical}input:focus,textarea:focus{border-color:rgba(2,135,96,.55);box-shadow:0 0 0 4px rgba(2,135,96,.10)}.view{display:none;margin-top:14px}.view.active{display:block}.grid{display:grid;gap:10px}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}@media(min-width:860px){.summary{grid-template-columns:repeat(7,minmax(0,1fr))}}.card,.panel{background:var(--surface);border:1px solid var(--border);box-shadow:0 10px 22px rgba(15,23,42,.045)}.card{border-radius:18px;min-height:96px;padding:13px}.card .label{color:var(--muted);font-size:12px;font-weight:900}.card .value{margin-top:4px;font-size:22px;line-height:1.15;font-weight:950;letter-spacing:-.04em}.card .sub{margin-top:6px;color:var(--muted);font-size:11px}.panel{border-radius:24px;padding:15px;margin-bottom:14px;overflow:hidden}.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.panel h2{margin:0;font-size:17px;line-height:1.25}.help{margin-top:5px;color:var(--muted);font-size:12px}.total{flex:0 0 auto;text-align:right;font-size:20px;font-weight:950;letter-spacing:-.03em}.formgrid{display:grid;gap:10px}@media(min-width:760px){.formgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}.money{display:grid;gap:8px}@media(min-width:780px){.money{grid-template-columns:repeat(2,minmax(0,1fr))}}.row{display:grid;grid-template-columns:1fr 44px 82px 44px;gap:8px;align-items:center;background:var(--surface2);border:1px solid #eef2f7;border-radius:16px;padding:9px}.dname{font-size:15px;font-weight:950;line-height:1.15}.dsub{color:var(--muted);font-size:11px;margin-top:3px}.countbtn,.countinput{height:42px;border:1px solid var(--border);border-radius:14px;background:#fff;text-align:center;font-size:18px;font-weight:950}.countbtn{width:44px}.countinput{width:82px}.posbox{display:grid;gap:10px}@media(min-width:860px){.posbox{grid-template-columns:1fr 1fr 1fr 1.1fr;align-items:end}}.bigchange{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:18px;padding:13px}.bigchange .label{font-size:12px;color:#065f46;font-weight:900}.bigchange .value{font-size:28px;font-weight:950;color:#065f46}.list{display:grid;gap:10px}.item{display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff;border:1px solid var(--border);border-radius:18px;padding:13px}.itemmain{min-width:0}.date{font-weight:950;font-size:15px}.small{color:var(--muted);font-size:12px;margin-top:3px}.badge{flex:0 0 auto;display:inline-flex;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:950;white-space:nowrap}.badge-ok{color:#065f46;background:#ecfdf5;border:1px solid #bbf7d0}.badge-ng{color:#991b1b;background:#fef2f2;border:1px solid #fecaca}.detail{flex:0 0 auto;border:1px solid var(--border);background:var(--surface2);border-radius:999px;padding:9px 12px;font-size:12px;font-weight:950}.empty{color:var(--muted);text-align:center;border:1px dashed #cbd5e1;border-radius:18px;padding:22px;background:rgba(255,255,255,.65)}.dangertext{color:var(--danger)}.oktext{color:var(--ok)}.bottomsum{position:fixed;left:50%;bottom:64px;z-index:25;transform:translateX(-50%);width:min(1100px,100%);padding:8px 14px;background:linear-gradient(180deg,rgba(246,247,249,0),rgba(246,247,249,.98) 18%)}.bottomin{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:rgba(17,24,39,.96);color:#fff;border-radius:20px;padding:10px;box-shadow:0 18px 45px rgba(15,23,42,.26)}.blabel{color:rgba(255,255,255,.68);font-size:11px;font-weight:900}.bvalue{font-size:18px;font-weight:950;letter-spacing:-.03em}.nav{position:fixed;left:50%;bottom:0;z-index:40;transform:translateX(-50%);width:min(1100px,100%);padding:8px 8px calc(8px + var(--safe));background:rgba(255,255,255,.96);border-top:1px solid var(--border);backdrop-filter:blur(18px)}.navscroll{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none}.navscroll::-webkit-scrollbar{display:none}.navbtn{flex:0 0 auto;min-width:96px;border:1px solid var(--border);background:#fff;color:#374151;border-radius:16px;padding:9px 10px;font-size:12px;font-weight:950}.navbtn.active{background:var(--primary);color:#fff;border-color:var(--primary)}.toast{position:fixed;left:50%;bottom:140px;transform:translateX(-50%) translateY(18px);z-index:100;width:min(92vw,430px);background:#111827;color:#fff;border-radius:16px;padding:13px 15px;font-weight:900;box-shadow:0 20px 45px rgba(0,0,0,.22);opacity:0;pointer-events:none;transition:.22s ease;text-align:center}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}.hidden{display:none!important}@media(max-width:680px){.app{padding-left:10px;padding-right:10px}.topactions{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.card .value{font-size:20px}.bottomsum{bottom:70px}.row{grid-template-columns:1fr 42px 76px 42px}.navbtn{min-width:88px}}
+</style>
 </head>
-
 <body>
-  <div class="app">
-    <header class="top">
-      <div class="top-inner">
-        <div class="brand">
-          <div>
-            <h1>現金精算アプリ</h1>
-            <p class="lead">Cloudflare D1同期版 / 3端末対応</p>
-          </div>
-          <div class="status-pill offline" id="syncStatus">未接続</div>
-        </div>
+<div class="app">
+<header class="top">
+  <div class="topin">
+    <div class="brand">
+      <div><h1>現金精算アプリ</h1><p class="lead">Cloudflare D1同期版 / POS・3端末対応</p></div>
+      <div class="pill" id="syncStatus">未接続</div>
+    </div>
+    <div class="topactions" id="mainActions">
+      <button class="btn btn-primary" id="saveBtn">この内容を保存・同期</button>
+      <button class="btn btn-light" id="newBtn">新規入力</button>
+      <button class="btn btn-soft-danger" id="deleteBtn">この記録を削除</button>
+    </div>
+  </div>
+</header>
 
-        <nav class="tabs">
-          <button class="tab-btn active" data-tab="home">ホーム</button>
-          <button class="tab-btn" data-tab="history">履歴</button>
-          <button class="tab-btn" data-tab="backup">保存/出力</button>
-        </nav>
-      </div>
-    </header>
+<section class="login" id="loginBox">
+  <h2>PINを入力してください</h2>
+  <p>Cloudflare Pages の環境変数 <b>APP_PIN</b> に設定した文字を入力します。同じPINで3端末から同じデータを共有できます。</p>
+  <div class="loginrow">
+    <div><label for="pinInput">APP_PIN</label><input id="pinInput" type="password" placeholder="例：cash2026mizuno" autocomplete="current-password"></div>
+    <button class="btn btn-primary" id="loginBtn">接続する</button>
+  </div>
+</section>
 
-    <section class="login" id="loginBox">
-      <h2>PINを入力してください</h2>
-      <p>
-        Cloudflare Pages の環境変数 <strong>APP_PIN</strong> に設定した文字を入力します。
-        3端末すべて同じPINでログインすると、同じデータを共有できます。
-      </p>
-      <div class="login-row">
-        <div>
-          <label for="pinInput">APP_PIN</label>
-          <input id="pinInput" type="password" placeholder="例：cash2026mizuno" autocomplete="current-password" />
-        </div>
-        <button class="btn btn-primary" id="loginBtn">接続する</button>
+<main id="appMain" class="hidden">
+  <section class="view active" id="view-home">
+    <div class="notice"><b>計算：</b> 理論上の終了金額 = 開始時 + POS売上 + 受取タブ + チップ + 両替・追加。差異が0円ならOKです。</div>
+    <div class="summary">
+      <div class="card"><div class="label">開始時</div><div class="value" id="sumStart">¥0</div><div class="sub">最初に持っていた現金</div></div>
+      <div class="card"><div class="label">POS売上</div><div class="value" id="sumPosSales">¥0</div><div class="sub">POSで登録した売上</div></div>
+      <div class="card"><div class="label">預かり</div><div class="value" id="sumPaid">¥0</div><div class="sub">POS預かり + 受取タブ</div></div>
+      <div class="card"><div class="label">おつり</div><div class="value" id="sumChange">¥0</div><div class="sub">POSで計算したおつり</div></div>
+      <div class="card"><div class="label">現金売上</div><div class="value" id="sumSales">¥0</div><div class="sub">POS売上 + 受取 + チップ</div></div>
+      <div class="card"><div class="label">終了時</div><div class="value" id="sumEnd">¥0</div><div class="sub">最後に数えた現金</div></div>
+      <div class="card"><div class="label">差異</div><div class="value" id="sumDiff">¥0</div><div class="sub" id="sumDiffHelp">差異なし</div></div>
+    </div>
+
+    <section class="panel">
+      <div class="head"><div><h2>基本情報</h2><div class="help">日付・開始時刻・終了時刻を記録できます。</div></div></div>
+      <div class="formgrid">
+        <div><label for="workDate">日付</label><input id="workDate" type="date"></div>
+        <div><label for="startTime">開始時刻</label><input id="startTime" type="time"></div>
+        <div><label for="endTime">終了時刻</label><input id="endTime" type="time"></div>
+        <div><label for="memo">メモ</label><textarea id="memo" placeholder="例：夜稼働 / 雨 / 両替あり"></textarea></div>
       </div>
     </section>
 
-    <main id="appMain" class="hidden">
-      <section class="tab active" id="tab-home">
-        <div class="notice">
-          <strong>計算式：</strong>
-          理論上の終了金額 = 開始時 + 受取 + チップ + 両替・追加。
-          差異が0円ならOKです。
-        </div>
+    <section class="panel">
+      <div class="head"><div><h2>本日の記録</h2><div class="help">ホームには今日の記録だけ表示します。</div></div></div>
+      <div id="todayList" class="list"></div>
+    </section>
 
-        <div class="summary-grid">
-          <div class="card">
-            <div class="label">開始時</div>
-            <div class="value" id="sumStart">¥0</div>
-            <div class="sub">最初に持っていた現金</div>
-          </div>
-          <div class="card">
-            <div class="label">受取</div>
-            <div class="value" id="sumReceived">¥0</div>
-            <div class="sub">お客様から受け取った現金</div>
-          </div>
-          <div class="card">
-            <div class="label">現金売上</div>
-            <div class="value" id="sumSales">¥0</div>
-            <div class="sub">受取 + チップ</div>
-          </div>
-          <div class="card">
-            <div class="label">終了時</div>
-            <div class="value" id="sumEnd">¥0</div>
-            <div class="sub">最後に数えた現金</div>
-          </div>
-          <div class="card">
-            <div class="label">差異</div>
-            <div class="value" id="sumDiff">¥0</div>
-            <div class="sub" id="sumDiffHelp">差異なし</div>
-          </div>
-        </div>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>基本情報</h2>
-              <div class="panel-help">日付・開始時刻・終了時刻を記録できます。</div>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div>
-              <label for="workDate">日付</label>
-              <input id="workDate" type="date" />
-            </div>
-            <div>
-              <label for="startTime">開始時刻</label>
-              <input id="startTime" type="time" />
-            </div>
-            <div>
-              <label for="endTime">終了時刻</label>
-              <input id="endTime" type="time" />
-            </div>
-            <div>
-              <label for="memo">メモ</label>
-              <textarea id="memo" placeholder="例：夜稼働 / 雨 / 両替あり"></textarea>
-            </div>
-          </div>
-        </section>
-
-        <div id="moneySections"></div>
-
-        <div class="actions">
-          <button class="btn btn-primary" id="saveBtn">この内容を保存・同期</button>
-          <button class="btn btn-light" id="newBtn">新規入力</button>
-          <button class="btn btn-danger" id="deleteBtn">この記録を削除</button>
-        </div>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>本日の記録</h2>
-              <div class="panel-help">ホームには今日の記録だけ表示します。</div>
-            </div>
-          </div>
-          <div id="todayList" class="record-list"></div>
-        </section>
-      </section>
-
-      <section class="tab" id="tab-history">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>履歴</h2>
-              <div class="panel-help">詳細を押すとホーム画面で確認・編集できます。</div>
-            </div>
-          </div>
-          <div id="historyList" class="record-list"></div>
-        </section>
-      </section>
-
-      <section class="tab" id="tab-backup">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>保存 / 出力</h2>
-              <div class="panel-help">データはCloudflare D1に保存されます。CSVやJSONでも出力できます。</div>
-            </div>
-          </div>
-
-          <div class="actions">
-            <button class="btn btn-dark" id="reloadBtn">最新データを読み込む</button>
-            <button class="btn btn-light" id="exportJsonBtn">JSONバックアップ</button>
-            <button class="btn btn-light" id="exportCsvBtn">CSV出力</button>
-          </div>
-
-          <p class="small-text">
-            ※ 10秒ごとに自動で最新データを読み込みます。別端末で保存した内容もここに反映されます。
-          </p>
-          <button class="btn btn-danger" id="logoutBtn">PINを解除してログアウト</button>
-        </section>
-      </section>
-    </main>
-  </div>
-
-  <div class="bottom-summary" id="bottomBox">
-    <div class="bottom-inner">
-      <div>
-        <div class="bottom-label">理論上の終了金額</div>
-        <div class="bottom-value" id="bottomExpected">¥0</div>
+    <section class="panel">
+      <div class="head"><div><h2>履歴 / 出力</h2><div class="help">詳細を押すとホームに読み込みます。</div></div></div>
+      <div class="topactions">
+        <button class="btn btn-dark" id="reloadBtn">最新データを読み込む</button>
+        <button class="btn btn-light" id="exportJsonBtn">JSONバックアップ</button>
+        <button class="btn btn-light" id="exportCsvBtn">CSV出力</button>
       </div>
-      <div>
-        <div class="bottom-label">差異</div>
-        <div class="bottom-value" id="bottomDiff">¥0</div>
+      <div id="historyList" class="list" style="margin-top:12px"></div>
+      <p class="small">10秒ごとに自動同期します。別端末で保存した内容も反映されます。</p>
+      <button class="btn btn-danger" id="logoutBtn">PINを解除してログアウト</button>
+    </section>
+  </section>
+
+  <section class="view" id="view-start"><div id="section-start"></div></section>
+
+  <section class="view" id="view-pos">
+    <section class="panel">
+      <div class="head"><div><h2>POS登録</h2><div class="help">売上金額とお客様から預かった金額を入力すると、おつりを自動計算します。</div></div></div>
+      <div class="posbox">
+        <div><label for="posSale">売上金額</label><input id="posSale" type="number" inputmode="numeric" min="0" placeholder="例：7600"></div>
+        <div><label for="posPaid">お客様から預かった金額</label><input id="posPaid" type="number" inputmode="numeric" min="0" placeholder="例：10000"></div>
+        <div><label for="posMemo">メモ</label><input id="posMemo" type="text" placeholder="任意"></div>
+        <div class="bigchange"><div class="label">返すおつり</div><div class="value" id="posChange">¥0</div></div>
       </div>
-    </div>
+      <div class="topactions" style="grid-template-columns:1fr 1fr;margin-top:12px">
+        <button class="btn btn-primary" id="addPosBtn">POS明細を追加</button>
+        <button class="btn btn-light" id="clearPosInputBtn">入力をクリア</button>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="head"><div><h2>POS明細</h2><div class="help">POSで登録した明細です。保存・同期ボタンでD1に保存されます。</div></div><div class="total" id="posTotal">¥0</div></div>
+      <div id="posList" class="list"></div>
+    </section>
+  </section>
+
+  <section class="view" id="view-received"><div class="notice">ここは<b>POSを使わない売上</b>だけ入力してください。POSで登録した取引をここにも入れると二重計上になります。</div><div id="section-received"></div></section>
+  <section class="view" id="view-tips"><div id="section-tips"></div></section>
+  <section class="view" id="view-exchange"><div id="section-exchange"></div></section>
+  <section class="view" id="view-end"><div id="section-end"></div></section>
+</main>
+</div>
+
+<div class="bottomsum" id="bottomBox">
+  <div class="bottomin">
+    <div><div class="blabel">理論上の終了金額</div><div class="bvalue" id="bottomExpected">¥0</div></div>
+    <div><div class="blabel">差異</div><div class="bvalue" id="bottomDiff">¥0</div></div>
   </div>
-
-  <div class="toast" id="toast">保存しました</div>
-
-  <script>
-    const API_URL = "/api/records";
-    const PIN_KEY = "cash_balance_app_pin_v2";
-    const SYNC_INTERVAL_MS = 10000;
-
-    const DENOMS_ALL = [
-      { value: 10000, label: "1万円札" },
-      { value: 5000, label: "5千円札" },
-      { value: 2000, label: "2千円札" },
-      { value: 1000, label: "千円札" },
-      { value: 500, label: "500円玉" },
-      { value: 100, label: "100円玉" },
-      { value: 50, label: "50円玉" },
-      { value: 10, label: "10円玉" },
-      { value: 5, label: "5円玉" },
-      { value: 1, label: "1円玉" }
-    ];
-
-    const DENOMS_COINS = [
-      { value: 500, label: "500円玉" },
-      { value: 100, label: "100円玉" },
-      { value: 50, label: "50円玉" },
-      { value: 10, label: "10円玉" },
-      { value: 5, label: "5円玉" },
-      { value: 1, label: "1円玉" }
-    ];
-
-    const SECTIONS = [
-      {
-        key: "start",
-        title: "① 開始時の現金",
-        help: "稼働前に持っている現金を金種ごとに入力します。",
-        denoms: DENOMS_ALL
-      },
-      {
-        key: "received",
-        title: "② お客様から受け取った金額",
-        help: "お客様から受け取った現金を金種ごとに入力します。",
-        denoms: DENOMS_ALL
-      },
-      {
-        key: "exchange",
-        title: "③ 両替・追加した金額",
-        help: "途中で追加した現金や両替で増えた現金を入力します。売上には含めません。",
-        denoms: DENOMS_ALL
-      },
-      {
-        key: "tips",
-        title: "④ チップ",
-        help: "チップは小銭だけ入力できます。",
-        denoms: DENOMS_COINS
-      },
-      {
-        key: "end",
-        title: "⑤ 終了時の現金",
-        help: "稼働終了後、実際に手元にある現金を数えて入力します。",
-        denoms: DENOMS_ALL
-      }
-    ];
-
-    let records = [];
-    let state = createEmptyState();
-    let appPin = localStorage.getItem(PIN_KEY) || "";
-    let syncTimer = null;
-    let isLoading = false;
-
-    const els = {
-      loginBox: document.getElementById("loginBox"),
-      appMain: document.getElementById("appMain"),
-      pinInput: document.getElementById("pinInput"),
-      loginBtn: document.getElementById("loginBtn"),
-      syncStatus: document.getElementById("syncStatus"),
-
-      workDate: document.getElementById("workDate"),
-      startTime: document.getElementById("startTime"),
-      endTime: document.getElementById("endTime"),
-      memo: document.getElementById("memo"),
-      moneySections: document.getElementById("moneySections"),
-
-      sumStart: document.getElementById("sumStart"),
-      sumReceived: document.getElementById("sumReceived"),
-      sumSales: document.getElementById("sumSales"),
-      sumEnd: document.getElementById("sumEnd"),
-      sumDiff: document.getElementById("sumDiff"),
-      sumDiffHelp: document.getElementById("sumDiffHelp"),
-      bottomExpected: document.getElementById("bottomExpected"),
-      bottomDiff: document.getElementById("bottomDiff"),
-
-      saveBtn: document.getElementById("saveBtn"),
-      newBtn: document.getElementById("newBtn"),
-      deleteBtn: document.getElementById("deleteBtn"),
-
-      todayList: document.getElementById("todayList"),
-      historyList: document.getElementById("historyList"),
-
-      reloadBtn: document.getElementById("reloadBtn"),
-      exportJsonBtn: document.getElementById("exportJsonBtn"),
-      exportCsvBtn: document.getElementById("exportCsvBtn"),
-      logoutBtn: document.getElementById("logoutBtn"),
-      toast: document.getElementById("toast")
-    };
-
-    init();
-
-    function init() {
-      renderMoneySections();
-      bindEvents();
-      setFormFromState();
-      renderAll();
-
-      if (appPin) {
-        els.pinInput.value = appPin;
-        unlockApp();
-      }
-    }
-
-    function bindEvents() {
-      document.querySelectorAll(".tab-btn").forEach((btn) => {
-        btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-      });
-
-      els.loginBtn.addEventListener("click", () => {
-        const pin = els.pinInput.value.trim();
-        if (!pin) {
-          showToast("PINを入力してください");
-          return;
-        }
-
-        appPin = pin;
-        localStorage.setItem(PIN_KEY, appPin);
-        unlockApp();
-      });
-
-      els.pinInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") els.loginBtn.click();
-      });
-
-      els.workDate.addEventListener("input", () => {
-        state.date = els.workDate.value || todayISO();
-        renderAll();
-      });
-
-      els.startTime.addEventListener("input", () => {
-        state.startTime = els.startTime.value;
-      });
-
-      els.endTime.addEventListener("input", () => {
-        state.endTime = els.endTime.value;
-      });
-
-      els.memo.addEventListener("input", () => {
-        state.memo = els.memo.value;
-      });
-
-      els.saveBtn.addEventListener("click", saveCurrentRecord);
-
-      els.newBtn.addEventListener("click", () => {
-        if (!confirm("入力中の内容をクリアして新規入力にしますか？")) return;
-        state = createEmptyState();
-        setFormFromState();
-        renderAll();
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        showToast("新規入力にしました");
-      });
-
-      els.deleteBtn.addEventListener("click", deleteCurrentRecord);
-      els.reloadBtn.addEventListener("click", () => fetchRecords(true));
-      els.exportJsonBtn.addEventListener("click", exportJson);
-      els.exportCsvBtn.addEventListener("click", exportCsv);
-
-      els.logoutBtn.addEventListener("click", () => {
-        if (!confirm("この端末のPINを削除してログアウトしますか？")) return;
-        localStorage.removeItem(PIN_KEY);
-        appPin = "";
-        records = [];
-        state = createEmptyState();
-        stopSync();
-        els.appMain.classList.add("hidden");
-        els.loginBox.classList.remove("hidden");
-        els.pinInput.value = "";
-        setSyncStatus(false, "未接続");
-        renderAll();
-      });
-    }
-
-    function unlockApp() {
-      els.loginBox.classList.add("hidden");
-      els.appMain.classList.remove("hidden");
-      fetchRecords(true);
-      startSync();
-    }
-
-    function startSync() {
-      stopSync();
-      syncTimer = setInterval(() => {
-        fetchRecords(false);
-      }, SYNC_INTERVAL_MS);
-    }
-
-    function stopSync() {
-      if (syncTimer) clearInterval(syncTimer);
-      syncTimer = null;
-    }
-
-    async function apiFetch(url, options = {}) {
-      const res = await fetch(url, {
-        ...options,
-        headers: {
-          "content-type": "application/json",
-          "x-app-pin": appPin,
-          ...(options.headers || {})
-        }
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok || data.ok === false) {
-        throw new Error(data.error || `APIエラー: ${res.status}`);
-      }
-
-      return data;
-    }
-
-    async function fetchRecords(showMessage) {
-      if (!appPin || isLoading) return;
-
-      isLoading = true;
-      setSyncStatus(false, "同期中...");
-
-      try {
-        const data = await apiFetch(`${API_URL}?limit=500`);
-        const currentId = state.id;
-
-        records = Array.isArray(data.records)
-          ? data.records.map(normalizeRecord)
-          : [];
-
-        if (currentId) {
-          const latest = records.find((r) => r.id === currentId);
-          if (latest && isRemoteNewer(latest, state)) {
-            state = clone(latest);
-            setFormFromState();
-          }
-        }
-
-        renderAll();
-        setSyncStatus(true, "同期済み");
-
-        if (showMessage) showToast("最新データを読み込みました");
-      } catch (error) {
-        console.error(error);
-        setSyncStatus(false, "同期エラー");
-        if (showMessage) alert(error.message);
-      } finally {
-        isLoading = false;
-      }
-    }
-
-    async function saveCurrentRecord() {
-      if (!appPin) {
-        showToast("PINを入力してください");
-        return;
-      }
-
-      syncStateFromForm();
-
-      if (!state.date) state.date = todayISO();
-      if (!state.id) {
-        state.id = createId();
-        state.createdAt = new Date().toISOString();
-      }
-
-      const buttonText = els.saveBtn.textContent;
-      els.saveBtn.disabled = true;
-      els.saveBtn.textContent = "保存中...";
-
-      try {
-        const data = await apiFetch(API_URL, {
-          method: "POST",
-          body: JSON.stringify({ record: state })
-        });
-
-        state = normalizeRecord(data.record);
-        const index = records.findIndex((r) => r.id === state.id);
-        if (index >= 0) records[index] = clone(state);
-        else records.push(clone(state));
-
-        setFormFromState();
-        renderAll();
-        setSyncStatus(true, "同期済み");
-        showToast("保存・同期しました");
-      } catch (error) {
-        console.error(error);
-        alert(error.message);
-        setSyncStatus(false, "同期エラー");
-      } finally {
-        els.saveBtn.disabled = false;
-        els.saveBtn.textContent = buttonText;
-      }
-    }
-
-    async function deleteCurrentRecord() {
-      if (!state.id) {
-        showToast("まだ保存されていない記録です");
-        return;
-      }
-
-      if (!confirm("この記録を削除しますか？")) return;
-
-      try {
-        await apiFetch(`${API_URL}?id=${encodeURIComponent(state.id)}`, {
-          method: "DELETE"
-        });
-
-        records = records.filter((r) => r.id !== state.id);
-        state = createEmptyState();
-        setFormFromState();
-        renderAll();
-        showToast("削除しました");
-      } catch (error) {
-        console.error(error);
-        alert(error.message);
-      }
-    }
-
-    function renderMoneySections() {
-      els.moneySections.innerHTML = SECTIONS.map((section) => {
-        const rows = section.denoms.map((denom) => {
-          const id = `${section.key}-${denom.value}`;
-          return `
-            <div class="money-row">
-              <div>
-                <div class="denom-name">${escapeHtml(denom.label)}</div>
-                <div class="denom-sub">${yen(denom.value)} × 枚数</div>
-              </div>
-              <button class="count-btn" type="button" data-action="minus" data-section="${section.key}" data-denom="${denom.value}">−</button>
-              <input
-                class="count-input"
-                id="${id}"
-                data-section="${section.key}"
-                data-denom="${denom.value}"
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
-                value="0"
-              />
-              <button class="count-btn" type="button" data-action="plus" data-section="${section.key}" data-denom="${denom.value}">＋</button>
-            </div>
-          `;
-        }).join("");
-
-        return `
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <h2>${escapeHtml(section.title)}</h2>
-                <div class="panel-help">${escapeHtml(section.help)}</div>
-              </div>
-              <div class="section-total" id="total-${section.key}">¥0</div>
-            </div>
-            <div class="money-list">
-              ${rows}
-            </div>
-          </section>
-        `;
-      }).join("");
-
-      document.querySelectorAll(".count-input").forEach((input) => {
-        input.addEventListener("input", () => {
-          setCount(input.dataset.section, input.dataset.denom, input.value);
-          renderAll();
-        });
-
-        input.addEventListener("focus", () => input.select());
-      });
-
-      document.querySelectorAll(".count-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const section = btn.dataset.section;
-          const denom = btn.dataset.denom;
-          const action = btn.dataset.action;
-          const current = getCount(section, denom);
-          const next = action === "plus" ? current + 1 : Math.max(0, current - 1);
-
-          setCount(section, denom, next);
-
-          const input = document.getElementById(`${section}-${denom}`);
-          if (input) input.value = next;
-
-          renderAll();
-        });
-      });
-    }
-
-    function renderAll() {
-      renderSectionTotals();
-      renderSummary();
-      renderTodayList();
-      renderHistoryList();
-      updateDeleteButton();
-    }
-
-    function renderSectionTotals() {
-      SECTIONS.forEach((section) => {
-        const totalEl = document.getElementById(`total-${section.key}`);
-        if (totalEl) totalEl.textContent = yen(totalSection(section.key));
-      });
-    }
-
-    function renderSummary() {
-      const calc = calculate();
-
-      els.sumStart.textContent = yen(calc.start);
-      els.sumReceived.textContent = yen(calc.received);
-      els.sumSales.textContent = yen(calc.sales);
-      els.sumEnd.textContent = yen(calc.end);
-      els.sumDiff.textContent = yen(calc.diff);
-      els.bottomExpected.textContent = yen(calc.expectedEnd);
-      els.bottomDiff.textContent = yen(calc.diff);
-
-      els.sumDiff.classList.toggle("status-ok", calc.diff === 0);
-      els.sumDiff.classList.toggle("status-ng", calc.diff !== 0);
-      els.bottomDiff.classList.toggle("status-ok", calc.diff === 0);
-      els.bottomDiff.classList.toggle("status-ng", calc.diff !== 0);
-
-      if (calc.diff === 0) {
-        els.sumDiffHelp.textContent = "差異なし：OK";
-      } else if (calc.diff > 0) {
-        els.sumDiffHelp.textContent = `${yen(calc.diff)} 多いです`;
-      } else {
-        els.sumDiffHelp.textContent = `${yen(Math.abs(calc.diff))} 足りません`;
-      }
-    }
-
-    function renderTodayList() {
-      const today = todayISO();
-
-      const list = records
-        .filter((r) => r.date === today)
-        .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
-
-      if (list.length === 0) {
-        els.todayList.innerHTML = `<div class="empty">今日の保存データはまだありません。</div>`;
-        return;
-      }
-
-      els.todayList.innerHTML = list.map(recordCardHtml).join("");
-      bindRecordButtons(els.todayList);
-    }
-
-    function renderHistoryList() {
-      if (records.length === 0) {
-        els.historyList.innerHTML = `<div class="empty">履歴はまだありません。</div>`;
-        return;
-      }
-
-      const list = [...records].sort((a, b) => {
-        const dateDiff = String(b.date).localeCompare(String(a.date));
-        if (dateDiff !== 0) return dateDiff;
-        return String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt));
-      });
-
-      els.historyList.innerHTML = list.map(recordCardHtml).join("");
-      bindRecordButtons(els.historyList);
-    }
-
-    function recordCardHtml(record) {
-      const calc = calculateRecord(record);
-      const ok = calc.diff === 0;
-
-      return `
-        <div class="record-item">
-          <div class="record-main">
-            <div class="record-date">${escapeHtml(formatDateJa(record.date))}</div>
-            <div class="record-small">
-              ${escapeHtml(record.startTime || "--:--")}〜${escapeHtml(record.endTime || "--:--")}
-              / 売上 ${yen(calc.sales)}
-              / 差異 ${yen(calc.diff)}
-            </div>
-          </div>
-          <span class="badge ${ok ? "badge-ok" : "badge-ng"}">${ok ? "OK" : "差異あり"}</span>
-          <button class="detail-btn" data-open-id="${record.id}">詳細</button>
-        </div>
-      `;
-    }
-
-    function bindRecordButtons(root) {
-      root.querySelectorAll("[data-open-id]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const id = btn.dataset.openId;
-          const record = records.find((r) => r.id === id);
-          if (!record) return;
-
-          state = clone(record);
-          setFormFromState();
-          renderAll();
-          switchTab("home");
-          window.scrollTo({ top: 0, behavior: "smooth" });
-          showToast("詳細を開きました");
-        });
-      });
-    }
-
-    function setFormFromState() {
-      els.workDate.value = state.date || todayISO();
-      els.startTime.value = state.startTime || "";
-      els.endTime.value = state.endTime || "";
-      els.memo.value = state.memo || "";
-
-      SECTIONS.forEach((section) => {
-        section.denoms.forEach((denom) => {
-          const input = document.getElementById(`${section.key}-${denom.value}`);
-          if (input) input.value = getCount(section.key, denom.value);
-        });
-      });
-    }
-
-    function syncStateFromForm() {
-      state.date = els.workDate.value || todayISO();
-      state.startTime = els.startTime.value || "";
-      state.endTime = els.endTime.value || "";
-      state.memo = els.memo.value || "";
-    }
-
-    function calculate() {
-      return calculateRecord(state);
-    }
-
-    function calculateRecord(record) {
-      const start = totalSectionFromRecord(record, "start");
-      const received = totalSectionFromRecord(record, "received");
-      const exchange = totalSectionFromRecord(record, "exchange");
-      const tips = totalSectionFromRecord(record, "tips");
-      const end = totalSectionFromRecord(record, "end");
-
-      const sales = received + tips;
-      const expectedEnd = start + sales + exchange;
-      const diff = end - expectedEnd;
-
-      return {
-        start,
-        received,
-        exchange,
-        tips,
-        sales,
-        expectedEnd,
-        end,
-        diff
-      };
-    }
-
-    function totalSection(sectionKey) {
-      return totalSectionFromRecord(state, sectionKey);
-    }
-
-    function totalSectionFromRecord(record, sectionKey) {
-      const section = SECTIONS.find((s) => s.key === sectionKey);
-      if (!section) return 0;
-
-      return section.denoms.reduce((sum, denom) => {
-        const count = Number(record?.counts?.[sectionKey]?.[denom.value] || 0);
-        return sum + count * denom.value;
-      }, 0);
-    }
-
-    function setCount(sectionKey, denomValue, value) {
-      if (!state.counts[sectionKey]) state.counts[sectionKey] = {};
-      const num = Math.max(0, Math.floor(Number(value || 0)));
-      state.counts[sectionKey][String(denomValue)] = Number.isFinite(num) ? num : 0;
-    }
-
-    function getCount(sectionKey, denomValue) {
-      return Number(state?.counts?.[sectionKey]?.[String(denomValue)] || 0);
-    }
-
-    function createEmptyState() {
-      const counts = {};
-
-      SECTIONS.forEach((section) => {
-        counts[section.key] = {};
-        section.denoms.forEach((denom) => {
-          counts[section.key][String(denom.value)] = 0;
-        });
-      });
-
-      return {
-        id: "",
-        date: todayISO(),
-        startTime: "",
-        endTime: "",
-        memo: "",
-        counts,
-        createdAt: "",
-        updatedAt: ""
-      };
-    }
-
-    function normalizeRecord(record) {
-      const base = createEmptyState();
-
-      const merged = {
-        ...base,
-        ...record,
-        counts: {
-          ...base.counts,
-          ...(record?.counts || {})
-        }
-      };
-
-      SECTIONS.forEach((section) => {
-        merged.counts[section.key] = {
-          ...base.counts[section.key],
-          ...(record?.counts?.[section.key] || {})
-        };
-      });
-
-      if (!merged.id) merged.id = createId();
-      if (!merged.date) merged.date = todayISO();
-
-      return merged;
-    }
-
-    function updateDeleteButton() {
-      els.deleteBtn.disabled = !state.id;
-      els.deleteBtn.style.opacity = state.id ? "1" : ".45";
-    }
-
-    function setSyncStatus(ok, text) {
-      els.syncStatus.textContent = text;
-      els.syncStatus.classList.toggle("offline", !ok);
-    }
-
-    function isRemoteNewer(remote, local) {
-      if (!remote?.updatedAt) return false;
-      if (!local?.updatedAt) return true;
-      return new Date(remote.updatedAt).getTime() > new Date(local.updatedAt).getTime();
-    }
-
-    function switchTab(tabName) {
-      document.querySelectorAll(".tab-btn").forEach((btn) => {
-        btn.classList.toggle("active", btn.dataset.tab === tabName);
-      });
-
-      document.querySelectorAll(".tab").forEach((tab) => {
-        tab.classList.remove("active");
-      });
-
-      const target = document.getElementById(`tab-${tabName}`);
-      if (target) target.classList.add("active");
-    }
-
-    function exportJson() {
-      const data = {
-        app: "cash-balance-app-cloudflare-d1",
-        version: 2,
-        exportedAt: new Date().toISOString(),
-        records
-      };
-
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json"
-      });
-
-      downloadBlob(blob, `cash-balance-backup-${todayISO()}.json`);
-      showToast("JSONを書き出しました");
-    }
-
-    function exportCsv() {
-      const header = [
-        "日付",
-        "開始時刻",
-        "終了時刻",
-        "開始時金額",
-        "受取金額",
-        "両替追加",
-        "チップ",
-        "現金売上",
-        "理論上終了金額",
-        "実際終了金額",
-        "差異",
-        "メモ"
-      ];
-
-      const rows = records
-        .slice()
-        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-        .map((record) => {
-          const calc = calculateRecord(record);
-          return [
-            record.date,
-            record.startTime || "",
-            record.endTime || "",
-            calc.start,
-            calc.received,
-            calc.exchange,
-            calc.tips,
-            calc.sales,
-            calc.expectedEnd,
-            calc.end,
-            calc.diff,
-            record.memo || ""
-          ];
-        });
-
-      const csv = [header, ...rows]
-        .map((row) => row.map(csvCell).join(","))
-        .join("\n");
-
-      const blob = new Blob(["\ufeff" + csv], {
-        type: "text/csv;charset=utf-8"
-      });
-
-      downloadBlob(blob, `cash-balance-${todayISO()}.csv`);
-      showToast("CSVを書き出しました");
-    }
-
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    function csvCell(value) {
-      const text = String(value ?? "");
-      return `"${text.replace(/"/g, '""')}"`;
-    }
-
-    function yen(value) {
-      return new Intl.NumberFormat("ja-JP", {
-        style: "currency",
-        currency: "JPY",
-        maximumFractionDigits: 0
-      }).format(Number(value || 0));
-    }
-
-    function todayISO() {
-      const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    }
-
-    function formatDateJa(iso) {
-      if (!iso) return "";
-      const [y, m, d] = iso.split("-");
-      return `${Number(y)}年${Number(m)}月${Number(d)}日`;
-    }
-
-    function createId() {
-      return `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    }
-
-    function clone(value) {
-      return JSON.parse(JSON.stringify(value));
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    let toastTimer = null;
-
-    function showToast(message) {
-      els.toast.textContent = message;
-      els.toast.classList.add("show");
-
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => {
-        els.toast.classList.remove("show");
-      }, 2200);
-    }
-  </script>
+</div>
+
+<nav class="nav" id="bottomNav">
+  <div class="navscroll">
+    <button class="navbtn active" data-view="home">ホーム</button>
+    <button class="navbtn" data-view="start">開始時の現金</button>
+    <button class="navbtn" data-view="pos">POS</button>
+    <button class="navbtn" data-view="received">受け取った金額</button>
+    <button class="navbtn" data-view="tips">チップ</button>
+    <button class="navbtn" data-view="exchange">両替（追加）</button>
+    <button class="navbtn" data-view="end">終了時の金額</button>
+  </div>
+</nav>
+
+<div class="toast" id="toast">保存しました</div>
+
+<script>
+const API_URL="/api/records",PIN_KEY="cash_balance_app_pin_v3",SYNC_INTERVAL_MS=10000;
+const ALL=[{value:10000,label:"1万円札"},{value:5000,label:"5千円札"},{value:2000,label:"2千円札"},{value:1000,label:"千円札"},{value:500,label:"500円玉"},{value:100,label:"100円玉"},{value:50,label:"50円玉"},{value:10,label:"10円玉"},{value:5,label:"5円玉"},{value:1,label:"1円玉"}];
+const COINS=[{value:500,label:"500円玉"},{value:100,label:"100円玉"},{value:50,label:"50円玉"},{value:10,label:"10円玉"},{value:5,label:"5円玉"},{value:1,label:"1円玉"}];
+const SECTIONS=[
+ {key:"start",title:"開始時の現金",help:"稼働前に持っている現金を金種ごとに入力します。",denoms:ALL},
+ {key:"received",title:"受け取った金額",help:"POSを使わない売上だけ、金種ごとに入力します。",denoms:ALL},
+ {key:"tips",title:"チップ",help:"チップは小銭だけ入力できます。",denoms:COINS},
+ {key:"exchange",title:"両替・追加した金額",help:"途中で追加した現金や、両替で増えた現金を入力します。売上には含めません。",denoms:ALL},
+ {key:"end",title:"終了時の金額",help:"稼働終了後、実際に手元にある現金を数えて入力します。",denoms:ALL}
+];
+
+let records=[],state=createEmptyState(),appPin=localStorage.getItem(PIN_KEY)||"",syncTimer=null,isLoading=false;
+const $=id=>document.getElementById(id);
+const els={
+ loginBox:$("loginBox"),appMain:$("appMain"),pinInput:$("pinInput"),loginBtn:$("loginBtn"),syncStatus:$("syncStatus"),mainActions:$("mainActions"),
+ workDate:$("workDate"),startTime:$("startTime"),endTime:$("endTime"),memo:$("memo"),
+ sumStart:$("sumStart"),sumPosSales:$("sumPosSales"),sumPaid:$("sumPaid"),sumChange:$("sumChange"),sumSales:$("sumSales"),sumEnd:$("sumEnd"),sumDiff:$("sumDiff"),sumDiffHelp:$("sumDiffHelp"),bottomExpected:$("bottomExpected"),bottomDiff:$("bottomDiff"),
+ saveBtn:$("saveBtn"),newBtn:$("newBtn"),deleteBtn:$("deleteBtn"),todayList:$("todayList"),historyList:$("historyList"),
+ reloadBtn:$("reloadBtn"),exportJsonBtn:$("exportJsonBtn"),exportCsvBtn:$("exportCsvBtn"),logoutBtn:$("logoutBtn"),toast:$("toast"),
+ posSale:$("posSale"),posPaid:$("posPaid"),posMemo:$("posMemo"),posChange:$("posChange"),addPosBtn:$("addPosBtn"),clearPosInputBtn:$("clearPosInputBtn"),posList:$("posList"),posTotal:$("posTotal")
+};
+
+init();
+function init(){renderMoneySections();bindEvents();setFormFromState();renderAll();if(appPin){els.pinInput.value=appPin;unlockApp()}else{els.mainActions.classList.add("hidden");$("bottomBox").classList.add("hidden");$("bottomNav").classList.add("hidden")}}
+function bindEvents(){
+ document.querySelectorAll(".navbtn").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
+ els.loginBtn.addEventListener("click",()=>{const pin=els.pinInput.value.trim();if(!pin)return showToast("PINを入力してください");appPin=pin;localStorage.setItem(PIN_KEY,appPin);unlockApp()});
+ els.pinInput.addEventListener("keydown",e=>{if(e.key==="Enter")els.loginBtn.click()});
+ ["input","change"].forEach(ev=>{els.workDate.addEventListener(ev,()=>{state.date=els.workDate.value||todayISO();renderAll()})});
+ els.startTime.addEventListener("input",()=>state.startTime=els.startTime.value);
+ els.endTime.addEventListener("input",()=>state.endTime=els.endTime.value);
+ els.memo.addEventListener("input",()=>state.memo=els.memo.value);
+ els.saveBtn.addEventListener("click",saveCurrentRecord);
+ els.newBtn.addEventListener("click",()=>{if(!confirm("入力中の内容をクリアして新規入力にしますか？"))return;state=createEmptyState();setFormFromState();renderAll();switchView("home");scrollTo({top:0,behavior:"smooth"});showToast("新規入力にしました")});
+ els.deleteBtn.addEventListener("click",deleteCurrentRecord);
+ els.reloadBtn.addEventListener("click",()=>fetchRecords(true));
+ els.exportJsonBtn.addEventListener("click",exportJson);
+ els.exportCsvBtn.addEventListener("click",exportCsv);
+ els.logoutBtn.addEventListener("click",()=>{if(!confirm("この端末のPINを削除してログアウトしますか？"))return;localStorage.removeItem(PIN_KEY);appPin="";records=[];state=createEmptyState();stopSync();els.appMain.classList.add("hidden");els.loginBox.classList.remove("hidden");els.mainActions.classList.add("hidden");$("bottomBox").classList.add("hidden");$("bottomNav").classList.add("hidden");els.pinInput.value="";setSyncStatus(false,"未接続");renderAll()});
+ [els.posSale,els.posPaid].forEach(i=>i.addEventListener("input",renderPosChange));
+ els.addPosBtn.addEventListener("click",addPosItem);
+ els.clearPosInputBtn.addEventListener("click",clearPosInputs);
+}
+
+function unlockApp(){els.loginBox.classList.add("hidden");els.appMain.classList.remove("hidden");els.mainActions.classList.remove("hidden");$("bottomBox").classList.remove("hidden");$("bottomNav").classList.remove("hidden");fetchRecords(true);startSync()}
+function startSync(){stopSync();syncTimer=setInterval(()=>fetchRecords(false),SYNC_INTERVAL_MS)}
+function stopSync(){if(syncTimer)clearInterval(syncTimer);syncTimer=null}
+async function apiFetch(url,options={}){const res=await fetch(url,{...options,headers:{"content-type":"application/json","x-app-pin":appPin,...(options.headers||{})}});const data=await res.json().catch(()=>({}));if(!res.ok||data.ok===false)throw new Error(data.error||`APIエラー: ${res.status}`);return data}
+async function fetchRecords(show){if(!appPin||isLoading)return;isLoading=true;setSyncStatus(false,"同期中...");try{const data=await apiFetch(`${API_URL}?limit=500`);const currentId=state.id;records=Array.isArray(data.records)?data.records.map(normalizeRecord):[];if(currentId){const latest=records.find(r=>r.id===currentId);if(latest&&isRemoteNewer(latest,state)){state=clone(latest);setFormFromState()}}renderAll();setSyncStatus(true,"同期済み");if(show)showToast("最新データを読み込みました")}catch(e){console.error(e);setSyncStatus(false,"同期エラー");if(show)alert(e.message)}finally{isLoading=false}}
+async function saveCurrentRecord(){if(!appPin)return showToast("PINを入力してください");syncStateFromForm();if(!state.date)state.date=todayISO();if(!state.id){state.id=createId();state.createdAt=new Date().toISOString()}const old=els.saveBtn.textContent;els.saveBtn.disabled=true;els.saveBtn.textContent="保存中...";try{const data=await apiFetch(API_URL,{method:"POST",body:JSON.stringify({record:state})});state=normalizeRecord(data.record);const i=records.findIndex(r=>r.id===state.id);if(i>=0)records[i]=clone(state);else records.push(clone(state));setFormFromState();renderAll();setSyncStatus(true,"同期済み");showToast("保存・同期しました")}catch(e){console.error(e);alert(e.message);setSyncStatus(false,"同期エラー")}finally{els.saveBtn.disabled=false;els.saveBtn.textContent=old}}
+async function deleteCurrentRecord(){if(!state.id)return showToast("まだ保存されていない記録です");if(!confirm("この記録を削除しますか？"))return;try{await apiFetch(`${API_URL}?id=${encodeURIComponent(state.id)}`,{method:"DELETE"});records=records.filter(r=>r.id!==state.id);state=createEmptyState();setFormFromState();renderAll();showToast("削除しました")}catch(e){console.error(e);alert(e.message)}}
+
+function renderMoneySections(){SECTIONS.forEach(section=>{const host=$(`section-${section.key}`);if(!host)return;const rows=section.denoms.map(denom=>{const id=`${section.key}-${denom.value}`;return `<div class="row"><div><div class="dname">${escapeHtml(denom.label)}</div><div class="dsub">${yen(denom.value)} × 枚数</div></div><button class="countbtn" type="button" data-action="minus" data-section="${section.key}" data-denom="${denom.value}">−</button><input class="countinput" id="${id}" data-section="${section.key}" data-denom="${denom.value}" type="number" inputmode="numeric" min="0" step="1" value="0"><button class="countbtn" type="button" data-action="plus" data-section="${section.key}" data-denom="${denom.value}">＋</button></div>`}).join("");
+ host.innerHTML=`<section class="panel"><div class="head"><div><h2>${escapeHtml(section.title)}</h2><div class="help">${escapeHtml(section.help)}</div></div><div class="total" id="total-${section.key}">¥0</div></div><div class="money">${rows}</div></section>`});
+ document.querySelectorAll(".countinput").forEach(input=>{input.addEventListener("input",()=>{setCount(input.dataset.section,input.dataset.denom,input.value);renderAll()});input.addEventListener("focus",()=>input.select())});
+ document.querySelectorAll(".countbtn").forEach(btn=>btn.addEventListener("click",()=>{const s=btn.dataset.section,d=btn.dataset.denom,next=btn.dataset.action==="plus"?getCount(s,d)+1:Math.max(0,getCount(s,d)-1);setCount(s,d,next);const input=$(`${s}-${d}`);if(input)input.value=next;renderAll()}));
+}
+function renderAll(){renderSectionTotals();renderSummary();renderPosList();renderTodayList();renderHistoryList();updateDeleteButton();renderPosChange()}
+function renderSectionTotals(){SECTIONS.forEach(s=>{const el=$(`total-${s.key}`);if(el)el.textContent=yen(totalSection(s.key))})}
+function renderSummary(){const c=calculate();els.sumStart.textContent=yen(c.start);els.sumPosSales.textContent=yen(c.posSales);els.sumPaid.textContent=yen(c.paidTotal);els.sumChange.textContent=yen(c.posChange);els.sumSales.textContent=yen(c.sales);els.sumEnd.textContent=yen(c.end);els.sumDiff.textContent=yen(c.diff);els.bottomExpected.textContent=yen(c.expectedEnd);els.bottomDiff.textContent=yen(c.diff);[els.sumDiff,els.bottomDiff].forEach(el=>{el.classList.toggle("oktext",c.diff===0);el.classList.toggle("dangertext",c.diff!==0)});els.sumDiffHelp.textContent=c.diff===0?"差異なし：OK":c.diff>0?`${yen(c.diff)} 多いです`:`${yen(Math.abs(c.diff))} 足りません`}
+function renderTodayList(){const list=records.filter(r=>r.date===todayISO()).sort(sortUpdatedDesc);els.todayList.innerHTML=list.length?list.map(recordCardHtml).join(""):`<div class="empty">今日の保存データはまだありません。</div>`;bindRecordButtons(els.todayList)}
+function renderHistoryList(){const list=[...records].sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.updatedAt||b.createdAt).localeCompare(String(a.updatedAt||a.createdAt)));els.historyList.innerHTML=list.length?list.map(recordCardHtml).join(""):`<div class="empty">履歴はまだありません。</div>`;bindRecordButtons(els.historyList)}
+function recordCardHtml(r){const c=calculateRecord(r),ok=c.diff===0;return `<div class="item"><div class="itemmain"><div class="date">${escapeHtml(formatDateJa(r.date))}</div><div class="small">${escapeHtml(r.startTime||"--:--")}〜${escapeHtml(r.endTime||"--:--")} / POS ${yen(c.posSales)} / 売上 ${yen(c.sales)} / 差異 ${yen(c.diff)}</div></div><span class="badge ${ok?"badge-ok":"badge-ng"}">${ok?"OK":"差異あり"}</span><button class="detail" data-open-id="${r.id}">詳細</button></div>`}
+function bindRecordButtons(root){root.querySelectorAll("[data-open-id]").forEach(btn=>btn.addEventListener("click",()=>{const r=records.find(x=>x.id===btn.dataset.openId);if(!r)return;state=clone(r);setFormFromState();renderAll();switchView("home");scrollTo({top:0,behavior:"smooth"});showToast("詳細を開きました")}))}
+function renderPosChange(){const sale=toMoney(els.posSale.value),paid=toMoney(els.posPaid.value),change=paid-sale;els.posChange.textContent=yen(Math.max(0,change));els.posChange.classList.toggle("dangertext",change<0)}
+function addPosItem(){const sale=toMoney(els.posSale.value),paid=toMoney(els.posPaid.value);if(sale<=0)return showToast("売上金額を入力してください");if(paid<=0)return showToast("預かった金額を入力してください");if(paid<sale)return showToast("預かり金額が売上金額より少ないです");if(!Array.isArray(state.posItems))state.posItems=[];state.posItems.push({id:createId(),sale,paid,change:paid-sale,memo:els.posMemo.value.trim(),createdAt:new Date().toISOString()});clearPosInputs();renderAll();showToast("POS明細を追加しました")}
+function clearPosInputs(){els.posSale.value="";els.posPaid.value="";els.posMemo.value="";renderPosChange()}
+function renderPosList(){const list=Array.isArray(state.posItems)?state.posItems:[];const c=calculate();els.posTotal.textContent=yen(c.posSales);if(!list.length){els.posList.innerHTML=`<div class="empty">POS明細はまだありません。</div>`;return}els.posList.innerHTML=list.slice().reverse().map(item=>`<div class="item"><div class="itemmain"><div class="date">売上 ${yen(item.sale)} / 預かり ${yen(item.paid)} / おつり ${yen(item.change)}</div><div class="small">${escapeHtml(item.memo||"メモなし")} ${item.createdAt?"/ "+escapeHtml(formatDateTime(item.createdAt)):""}</div></div><button class="detail" data-delete-pos="${item.id}">削除</button></div>`).join("");els.posList.querySelectorAll("[data-delete-pos]").forEach(btn=>btn.addEventListener("click",()=>{if(!confirm("このPOS明細を削除しますか？"))return;state.posItems=(state.posItems||[]).filter(x=>x.id!==btn.dataset.deletePos);renderAll()}))}
+function setFormFromState(){els.workDate.value=state.date||todayISO();els.startTime.value=state.startTime||"";els.endTime.value=state.endTime||"";els.memo.value=state.memo||"";SECTIONS.forEach(section=>section.denoms.forEach(denom=>{const input=$(`${section.key}-${denom.value}`);if(input)input.value=getCount(section.key,denom.value)}))}
+function syncStateFromForm(){state.date=els.workDate.value||todayISO();state.startTime=els.startTime.value||"";state.endTime=els.endTime.value||"";state.memo=els.memo.value||""}
+function calculate(){return calculateRecord(state)}
+function calculateRecord(r){const start=totalFromRecord(r,"start"),received=totalFromRecord(r,"received"),tips=totalFromRecord(r,"tips"),exchange=totalFromRecord(r,"exchange"),end=totalFromRecord(r,"end"),posItems=Array.isArray(r.posItems)?r.posItems:[];const posSales=posItems.reduce((s,x)=>s+toMoney(x.sale),0),posPaid=posItems.reduce((s,x)=>s+toMoney(x.paid),0),posChange=posItems.reduce((s,x)=>s+toMoney(x.change),0),paidTotal=posPaid+received,sales=posSales+received+tips,expectedEnd=start+sales+exchange,diff=end-expectedEnd;return{start,received,tips,exchange,end,posSales,posPaid,posChange,paidTotal,sales,expectedEnd,diff}}
+function totalSection(k){return totalFromRecord(state,k)}
+function totalFromRecord(r,k){const section=SECTIONS.find(s=>s.key===k);if(!section)return 0;return section.denoms.reduce((sum,d)=>sum+Number(r?.counts?.[k]?.[String(d.value)]||0)*d.value,0)}
+function setCount(k,d,v){if(!state.counts[k])state.counts[k]={};const n=Math.max(0,Math.floor(Number(v||0)));state.counts[k][String(d)]=Number.isFinite(n)?n:0}
+function getCount(k,d){return Number(state?.counts?.[k]?.[String(d)]||0)}
+function createEmptyState(){const counts={};SECTIONS.forEach(section=>{counts[section.key]={};section.denoms.forEach(d=>counts[section.key][String(d.value)]=0)});return{id:"",date:todayISO(),startTime:"",endTime:"",memo:"",counts,posItems:[],createdAt:"",updatedAt:""}}
+function normalizeRecord(r){const base=createEmptyState(),merged={...base,...(r||{}),counts:{...base.counts,...(r?.counts||{})},posItems:Array.isArray(r?.posItems)?r.posItems:[]};SECTIONS.forEach(section=>{merged.counts[section.key]={...base.counts[section.key],...(r?.counts?.[section.key]||{})}});if(!merged.id)merged.id=createId();if(!merged.date)merged.date=todayISO();return merged}
+function updateDeleteButton(){els.deleteBtn.disabled=!state.id;els.deleteBtn.style.opacity=state.id?"1":".45"}
+function setSyncStatus(ok,text){els.syncStatus.textContent=text;els.syncStatus.classList.toggle("ok",ok)}
+function isRemoteNewer(remote,local){if(!remote?.updatedAt)return false;if(!local?.updatedAt)return true;return new Date(remote.updatedAt).getTime()>new Date(local.updatedAt).getTime()}
+function switchView(name){document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active",b.dataset.view===name));document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));const target=$(`view-${name}`);if(target)target.classList.add("active");scrollTo({top:0,behavior:"smooth"})}
+function exportJson(){const blob=new Blob([JSON.stringify({app:"cash-balance-app-cloudflare-d1-pos",version:3,exportedAt:new Date().toISOString(),records},null,2)],{type:"application/json"});downloadBlob(blob,`cash-balance-backup-${todayISO()}.json`);showToast("JSONを書き出しました")}
+function exportCsv(){const header=["日付","開始時刻","終了時刻","開始時金額","POS売上","POS預かり","POSおつり","受取タブ","チップ","両替追加","現金売上","理論上終了金額","実際終了金額","差異","メモ"];const rows=records.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(r=>{const c=calculateRecord(r);return[r.date,r.startTime||"",r.endTime||"",c.start,c.posSales,c.posPaid,c.posChange,c.received,c.tips,c.exchange,c.sales,c.expectedEnd,c.end,c.diff,r.memo||""]});const csv=[header,...rows].map(row=>row.map(csvCell).join(",")).join("\n");downloadBlob(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),`cash-balance-${todayISO()}.csv`);showToast("CSVを書き出しました")}
+function downloadBlob(blob,filename){const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}
+function csvCell(v){const text=String(v??"");return `"${text.replace(/"/g,'""')}"`}
+function yen(v){return new Intl.NumberFormat("ja-JP",{style:"currency",currency:"JPY",maximumFractionDigits:0}).format(Number(v||0))}
+function toMoney(v){const n=Math.floor(Number(v||0));return Number.isFinite(n)?Math.max(0,n):0}
+function todayISO(){const d=new Date(),y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`}
+function formatDateJa(iso){if(!iso)return"";const [y,m,d]=iso.split("-");return `${Number(y)}年${Number(m)}月${Number(d)}日`}
+function formatDateTime(iso){try{const d=new Date(iso);return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}catch(_){return""}}
+function createId(){return`rec_${Date.now()}_${Math.random().toString(36).slice(2,8)}`}
+function clone(v){return JSON.parse(JSON.stringify(v))}
+function escapeHtml(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}
+function sortUpdatedDesc(a,b){return String(b.updatedAt||b.createdAt).localeCompare(String(a.updatedAt||a.createdAt))}
+let toastTimer=null;function showToast(msg){els.toast.textContent=msg;els.toast.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>els.toast.classList.remove("show"),2200)}
+</script>
 </body>
 </html>

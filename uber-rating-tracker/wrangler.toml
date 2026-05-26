@@ -2,12 +2,5 @@ name = "uber-rating-tracker"
 main = "src/worker.js"
 compatibility_date = "2026-05-26"
 
-# Cloudflare D1を作成後、database_idを差し替えてください。
-# wrangler d1 create uber-rating-db
-[[d1_databases]]
-binding = "DB"
-database_name = "uber-rating-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
-
 [vars]
 APP_NAME = "Uber Rating Tracker"

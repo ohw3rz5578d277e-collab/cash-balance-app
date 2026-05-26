@@ -1,18 +1,348 @@
-const corsHeaders={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS","Access-Control-Allow-Headers":"Content-Type"};
-const json=(d,s=200)=>new Response(JSON.stringify(d),{status:s,headers:{"content-type":"application/json; charset=UTF-8",...corsHeaders}});
-const html=b=>new Response(b,{headers:{"content-type":"text/html; charset=UTF-8","Cache-Control":"no-store"}});
-const text=(b,t="text/plain; charset=UTF-8")=>new Response(b,{headers:{"content-type":t,"Cache-Control":"no-store"}});
-const uid=()=>crypto.randomUUID();
-const icon=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#04d477"/><stop offset="1" stop-color="#028760"/></linearGradient></defs><rect width="512" height="512" rx="108" fill="#07090b"/><circle cx="256" cy="256" r="196" fill="none" stroke="url(#g)" stroke-width="22"/><rect x="145" y="194" width="222" height="154" rx="36" fill="url(#g)"/><path d="M202 194c10-62 98-62 108 0" fill="none" stroke="#fff" stroke-width="20" stroke-linecap="round"/><text x="256" y="320" text-anchor="middle" font-size="112" font-family="Arial" font-weight="900" fill="#fff">👍</text><text x="256" y="420" text-anchor="middle" font-size="44" font-family="Arial" font-weight="900" fill="#fff">評価</text></svg>`;
-async function setup(env){await env.DB.prepare(`CREATE TABLE IF NOT EXISTS order_items(id TEXT PRIMARY KEY,status TEXT,seq INTEGER,store_name TEXT,area TEXT,memo TEXT,pickup_at INTEGER,completed_at INTEGER,pickup_lat REAL,pickup_lng REAL,dropoff_lat REAL,dropoff_lng REAL,pickup_display TEXT,dropoff_display TEXT,created_at INTEGER,updated_at INTEGER)`).run();await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ratings(id TEXT PRIMARY KEY,recorded_at INTEGER,total_good INTEGER,total_bad INTEGER,satisfaction INTEGER,delta_good INTEGER,delta_bad INTEGER,created_at INTEGER)`).run()}
-async function reverseGeocode(lat,lng){try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1`,{headers:{"User-Agent":"uber-rating-tracker/1.0"}});if(!r.ok)return null;const d=await r.json(),a=d.address||{};return{name:d.name||a.shop||a.amenity||a.restaurant||a.fast_food||a.convenience||a.building||a.road||"現在地",area:a.suburb||a.city_district||a.neighbourhood||a.city||a.town||a.village||"",display_name:d.display_name||""}}catch(e){return null}}
-export default{async fetch(req,env){const url=new URL(req.url);if(req.method==="OPTIONS")return new Response(null,{status:204,headers:corsHeaders});if(req.method==="GET"&&url.pathname==="/")return html(page());if(req.method==="GET"&&url.pathname==="/icon.svg")return text(icon,"image/svg+xml; charset=UTF-8");if(req.method==="GET"&&url.pathname==="/manifest.json")return json({name:"Uber Rating Tracker",short_name:"評価アプリ",start_url:"/",display:"standalone",background_color:"#080a0c",theme_color:"#028760",icons:[{src:"/icon.svg?v=multi-v1",sizes:"any",type:"image/svg+xml",purpose:"any maskable"}]});if(req.method==="GET"&&url.pathname==="/sw.js")return text("self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());","application/javascript; charset=UTF-8");if(url.pathname==="/api/health")return json({ok:true,service:"uber-rating-tracker",build:"multi-pickup-d1-v1",hasDb:!!env.DB,time:new Date().toISOString()});if(url.pathname==="/api/reverse-geocode"){const lat=url.searchParams.get("lat"),lng=url.searchParams.get("lng");if(!lat||!lng)return json({ok:false,error:"lat_lng_required"},400);return json({ok:true,result:await reverseGeocode(lat,lng)})}if(!env.DB)return json({ok:false,error:"DB_NOT_CONNECTED"},503);await setup(env);
-if(url.pathname==="/api/orders"&&req.method==="GET"){const status=url.searchParams.get("status");let q="SELECT * FROM order_items ",args=[];if(status){q+="WHERE status=? ";args.push(status)}q+="ORDER BY created_at DESC LIMIT 200";const r=await env.DB.prepare(q).bind(...args).all();return json({ok:true,items:r.results||[]})}
-if(url.pathname==="/api/orders"&&req.method==="POST"){const b=await req.json(),now=Date.now(),id=b.id||uid();const row=await env.DB.prepare("SELECT COALESCE(MAX(seq),0)+1 n FROM order_items WHERE status='active'").first();const seq=Number(row?.n||1);await env.DB.prepare(`INSERT INTO order_items(id,status,seq,store_name,area,memo,pickup_at,completed_at,pickup_lat,pickup_lng,dropoff_lat,dropoff_lng,pickup_display,dropoff_display,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,"active",seq,String(b.store_name||""),String(b.area||""),String(b.memo||""),b.pickup_at||now,null,b.pickup_lat??null,b.pickup_lng??null,null,null,String(b.pickup_display||""),"",now,now).run();return json({ok:true,id,seq})}
-if(url.pathname.startsWith("/api/orders/")&&req.method==="PUT"){const id=decodeURIComponent(url.pathname.split('/').pop()),b=await req.json(),now=Date.now();await env.DB.prepare(`UPDATE order_items SET status=COALESCE(?,status),store_name=COALESCE(?,store_name),area=COALESCE(?,area),memo=COALESCE(?,memo),completed_at=COALESCE(?,completed_at),dropoff_lat=COALESCE(?,dropoff_lat),dropoff_lng=COALESCE(?,dropoff_lng),dropoff_display=COALESCE(?,dropoff_display),updated_at=? WHERE id=?`).bind(b.status??null,b.store_name??null,b.area??null,b.memo??null,b.completed_at??null,b.dropoff_lat??null,b.dropoff_lng??null,b.dropoff_display??null,now,id).run();return json({ok:true})}
-if(url.pathname.startsWith("/api/orders/")&&req.method==="DELETE"){await env.DB.prepare("DELETE FROM order_items WHERE id=?").bind(decodeURIComponent(url.pathname.split('/').pop())).run();return json({ok:true})}
-if(url.pathname==="/api/ratings"&&req.method==="GET"){const r=await env.DB.prepare("SELECT * FROM ratings ORDER BY recorded_at DESC LIMIT 100").all();return json({ok:true,items:r.results||[]})}
-if(url.pathname==="/api/ratings"&&req.method==="POST"){const b=await req.json(),now=Date.now(),g=Number(b.total_good||0),bad=Number(b.total_bad||0),sat=g+bad>0?Math.round(g/(g+bad)*100):0,prev=await env.DB.prepare("SELECT total_good,total_bad FROM ratings ORDER BY recorded_at DESC LIMIT 1").first(),dg=prev?g-Number(prev.total_good||0):0,db=prev?bad-Number(prev.total_bad||0):0,id=uid();await env.DB.prepare(`INSERT INTO ratings(id,recorded_at,total_good,total_bad,satisfaction,delta_good,delta_bad,created_at) VALUES(?,?,?,?,?,?,?,?)`).bind(id,now,g,bad,sat,dg,db,now).run();return json({ok:true,id,satisfaction:sat,delta_good:dg,delta_bad:db})}
-if(url.pathname.startsWith("/api/ratings/")&&req.method==="DELETE"){await env.DB.prepare("DELETE FROM ratings WHERE id=?").bind(decodeURIComponent(url.pathname.split('/').pop())).run();return json({ok:true})}
-return json({ok:false,error:"NOT_FOUND"},404)}};
-function page(){return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>評価アプリ</title><link rel="manifest" href="/manifest.json?v=multi-v1"><link rel="icon" href="/icon.svg?v=multi-v1"><link rel="apple-touch-icon" href="/icon.svg?v=multi-v1"><meta name="theme-color" content="#028760"><script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script><style>:root{--bg:#080a0c;--card:#141820;--line:#2d3440;--green:#04b873;--green2:#028760;--red:#ff5d5d;--blue:#2b64ff;--muted:#9aa3b2;--orange:#ff9f43}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;background:radial-gradient(circle at top,#123326 0,#080a0c 38%);color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Noto Sans JP',sans-serif;padding:12px 12px 94px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.title{font-size:20px;font-weight:950}.sync{font-size:12px;border:1px solid #245c45;background:#10261d;color:#69efa9;border-radius:999px;padding:7px 10px}.card,.hero{background:rgba(20,24,32,.96);border:1px solid var(--line);border-radius:22px;padding:15px;margin-bottom:12px}.hero{border-color:#245c45;background:linear-gradient(160deg,#06291e,#141820 65%)}.cap{color:var(--muted);font-size:12px;font-weight:800}.sat{font-size:58px;font-weight:950}.grid,.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.box{background:rgba(255,255,255,.06);border-radius:18px;padding:13px}.num{font-size:30px;font-weight:950}.ok{color:#5be39a}.bad{color:var(--red)}.big{width:100%;border:0;border-radius:24px;min-height:118px;padding:20px;text-align:left;color:#fff;font-size:25px;font-weight:950;box-shadow:0 10px 24px rgba(0,0,0,.28);margin-bottom:12px}.big small{display:block;font-size:13px;margin-top:8px;opacity:.85}.pickup{background:linear-gradient(135deg,#ffb03a,#e66f00)}.save{background:linear-gradient(135deg,var(--green),var(--green2))}.ocr{background:linear-gradient(135deg,var(--blue),#182a70)}button{border:0;border-radius:15px;background:var(--green2);color:#fff;padding:13px;font-size:15px;font-weight:900;margin-top:8px}button.danger{background:#633039}button.secondary{background:#273142}.order{border:1px solid #303848;background:#10151d;border-radius:18px;padding:13px;margin-top:10px}.orderTop{display:flex;justify-content:space-between;gap:10px}.badge{background:#243327;color:#6bf3aa;border:1px solid #245c45;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900}.hint{font-size:13px;color:var(--muted);line-height:1.6}.tabs{position:fixed;left:10px;right:10px;bottom:8px;background:rgba(8,10,12,.95);border:1px solid var(--line);border-radius:20px;padding:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.tab{border-radius:14px;background:#202631;padding:12px 4px;font-size:12px}.screen{display:none}.screen.active{display:block}input,textarea{width:100%;background:#10151d;border:1px solid var(--line);border-radius:14px;color:#fff;font-size:16px;padding:13px;margin-top:9px}textarea{min-height:70px}.toast{display:none;position:fixed;top:10px;left:12px;right:12px;background:#202631;border:1px solid var(--line);border-radius:16px;padding:13px;z-index:99}.toast.show{display:block}.file{display:none}</style></head><body><div id="toast" class="toast"></div><div class="top"><div class="title">評価アプリ</div><div id="sync" class="sync">確認中</div></div><section id="home" class="screen active"><div class="hero"><div class="cap">今の満足度</div><div id="sat" class="sat">--%</div><div class="grid"><div class="box"><div class="cap">GOOD</div><div id="good" class="num ok">--</div></div><div class="box"><div class="cap">BAD</div><div id="bad" class="num bad">--</div></div></div></div><button id="pickupBtn" class="big pickup">店舗ピックアップ追加<small>複数店舗OK / GPSで店舗候補取得</small></button><button id="ocrHome" class="big ocr">評価を読む<small>スクショOCR</small></button><input id="homeFile" class="file" type="file" accept="image/*"><div class="card"><div class="cap">未配達リスト</div><div id="activeList"></div></div><div class="card"><div class="cap">今日</div><div class="two"><div><div class="hint">未配達</div><div id="activeCount" class="num">0</div></div><div><div class="hint">完了</div><div id="doneCount" class="num">0</div></div></div></div></section><section id="ocr" class="screen"><div class="card"><div class="cap">OCR</div><button id="pickImage" class="ocr">スクショを選ぶ</button><input id="imageFile" class="file" type="file" accept="image/*"><div id="ocrBox"></div></div><div class="card"><div class="cap">手動入力</div><div class="two"><input id="manualGood" type="number" placeholder="GOOD"><input id="manualBad" type="number" placeholder="BAD"></div><button id="manualSave">保存</button></div></section><section id="orders" class="screen"><div class="card"><div class="cap">未配達</div><div id="activeList2"></div></div></section><section id="history" class="screen"><div class="card"><div class="cap">配達履歴</div><div id="doneList"></div></div><div class="card"><div class="cap">評価履歴</div><div id="ratingList"></div></div></section><div class="tabs"><button class="tab" data-tab="home">ホーム</button><button class="tab" data-tab="ocr">OCR</button><button class="tab" data-tab="orders">配達</button><button class="tab" data-tab="history">履歴</button></div><script>const $=id=>document.getElementById(id);let active=[],done=[],ratings=[];function toast(m){$('toast').textContent=m;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}function buzz(p=[40]){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}const fmt=t=>new Date(Number(t)).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});function esc(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}async function api(p,o){const r=await fetch(p,o);if(!r.ok)throw new Error(String(r.status));return r.json()}async function gps(){return new Promise(res=>{if(!navigator.geolocation)return res({});navigator.geolocation.getCurrentPosition(async pos=>{const lat=pos.coords.latitude,lng=pos.coords.longitude;let place=null;try{place=(await api('/api/reverse-geocode?lat='+lat+'&lng='+lng)).result}catch(e){}res({lat,lng,name:place?.name||'店舗候補なし',area:place?.area||'',display:place?.display_name||''})},()=>res({}),{enableHighAccuracy:false,timeout:3500})})}async function load(){try{$('sync').textContent='同期中';active=(await api('/api/orders?status=active')).items||[];done=(await api('/api/orders?status=done')).items||[];ratings=(await api('/api/ratings')).items||[];$('sync').textContent='DB同期OK'}catch(e){$('sync').textContent='DBエラー';toast('DB読込エラー')}render()}function render(){const latest=ratings[0];if(latest){$('sat').textContent=latest.satisfaction+'%';$('good').textContent=latest.total_good;$('bad').textContent=latest.total_bad}else{$('sat').textContent='--%';$('good').textContent='--';$('bad').textContent='--'}$('activeCount').textContent=active.length;$('doneCount').textContent=done.filter(x=>Number(x.completed_at)>=new Date().setHours(0,0,0,0)).length;const activeHtml=active.map(x=>'<div class="order"><div class="orderTop"><div><span class="badge">#'+x.seq+'</span> <b>'+esc(x.store_name||'店舗未入力')+'</b><div class="hint">'+fmt(x.pickup_at)+' '+esc(x.area||'')+'</div></div></div><button class="save" onclick="completeOrder(\''+x.id+'\')">この注文を配達完了</button><button class="secondary" onclick="editOrder(\''+x.id+'\',true)">編集</button><button class="danger" onclick="deleteOrder(\''+x.id+'\')">削除</button></div>').join('')||'<div class="hint">未配達はありません</div>';$('activeList').innerHTML=activeHtml;$('activeList2').innerHTML=activeHtml;$('doneList').innerHTML=done.map(x=>'<div class="order"><span class="badge">完了</span> <b>'+esc(x.store_name||'店舗未入力')+'</b><div class="hint">'+fmt(x.completed_at)+' '+esc(x.area||'')+'</div><button class="secondary" onclick="editOrder(\''+x.id+'\',false)">編集</button><button class="danger" onclick="deleteOrder(\''+x.id+'\')">削除</button></div>').join('')||'<div class="hint">履歴なし</div>';$('ratingList').innerHTML=ratings.map(x=>'<div class="order"><b>👍 '+x.total_good+' / 👎 '+x.total_bad+'</b><div class="hint">'+fmt(x.recorded_at)+'</div></div>').join('')||'<div class="hint">評価履歴なし</div>'}async function addPickup(){toast('店舗GPS取得中');buzz([30]);const g=await gps();const body={store_name:g.name||'',area:g.area||'',memo:g.display||'',pickup_at:Date.now(),pickup_lat:g.lat??null,pickup_lng:g.lng??null,pickup_display:g.display||''};await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});toast('ピックアップ追加しました');await load()}async function completeOrder(id){const target=active.find(x=>x.id===id);if(!target)return;toast('配達完了GPS取得中');buzz([40,40]);const g=await gps();await api('/api/orders/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'done',completed_at:Date.now(),dropoff_lat:g.lat??null,dropoff_lng:g.lng??null,dropoff_display:g.display||'',memo:(target.memo||'')+' / 配達先: '+(g.display||'GPS取得')})});toast('配達完了しました');await load()}async function editOrder(id,isActive){const arr=isActive?active:done,x=arr.find(v=>v.id===id);if(!x)return;const s=prompt('店舗名',x.store_name||'');if(s===null)return;const a=prompt('エリア',x.area||'');if(a===null)return;const m=prompt('メモ',x.memo||'');if(m===null)return;await api('/api/orders/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_name:s,area:a,memo:m})});toast('編集しました');await load()}async function deleteOrder(id){if(!confirm('削除しますか？'))return;await api('/api/orders/'+encodeURIComponent(id),{method:'DELETE'});toast('削除しました');await load()}window.completeOrder=completeOrder;window.editOrder=editOrder;window.deleteOrder=deleteOrder;async function saveRating(g,b){g=Number(g||0);b=Number(b||0);if(g+b===0)return toast('数字を確認してください');await api('/api/ratings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({total_good:g,total_bad:b})});toast('評価を保存しました');await load()}async function parse(file){$('ocrBox').innerHTML='<div class="hint">OCR解析中...</div>';try{const r=await Tesseract.recognize(file,'eng'),nums=(r.data.text.match(/\d+/g)||[]).map(n=>parseInt(n,10));let g=0,b=0;for(let i=0;i<nums.length-1;i++){if(nums[i]+nums[i+1]===100){g=nums[i];b=nums[i+1];break}}if(!g&&!b&&nums.length>=2){g=nums[nums.length-2];b=nums[nums.length-1]}$('ocrBox').innerHTML='<div class="two"><input id="ocrGood" type="number" value="'+g+'"><input id="ocrBad" type="number" value="'+b+'"></div><button id="ocrSave">保存</button>';$('ocrSave').onclick=()=>saveRating($('ocrGood').value,$('ocrBad').value);if(g+b>0)await saveRating(g,b)}catch(e){$('ocrBox').innerHTML='<div class="bad">OCRエラー</div>'}}document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(b.dataset.tab).classList.add('active')});$('pickupBtn').onclick=addPickup;$('ocrHome').onclick=()=>$('homeFile').click();$('pickImage').onclick=()=>$('imageFile').click();$('homeFile').onchange=e=>{if(e.target.files[0])parse(e.target.files[0])};$('imageFile').onchange=e=>{if(e.target.files[0])parse(e.target.files[0])};$('manualSave').onclick=()=>saveRating($('manualGood').value,$('manualBad').value);window.addEventListener('DOMContentLoaded',load);</script></body></html>`}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json; charset=UTF-8", ...corsHeaders }
+  });
+}
+
+function html(body) {
+  return new Response(body, {
+    headers: { "content-type": "text/html; charset=UTF-8", "Cache-Control": "no-store" }
+  });
+}
+
+function text(body, type = "text/plain; charset=UTF-8") {
+  return new Response(body, {
+    headers: { "content-type": type, "Cache-Control": "no-store" }
+  });
+}
+
+function uid() {
+  return crypto.randomUUID();
+}
+
+const appIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="108" fill="#07090b"/><circle cx="256" cy="256" r="190" fill="none" stroke="#04d477" stroke-width="24"/><rect x="145" y="190" width="222" height="158" rx="38" fill="#028760"/><path d="M202 190c10-62 98-62 108 0" fill="none" stroke="#fff" stroke-width="20" stroke-linecap="round"/><text x="256" y="320" text-anchor="middle" font-size="108" font-family="Arial" font-weight="900" fill="#fff">👍</text><text x="256" y="420" text-anchor="middle" font-size="44" font-family="Arial" font-weight="900" fill="#fff">評価</text></svg>`;
+
+async function setup(env) {
+  if (!env.DB) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS order_items (
+    id TEXT PRIMARY KEY,
+    status TEXT,
+    seq INTEGER,
+    store_name TEXT,
+    area TEXT,
+    memo TEXT,
+    pickup_at INTEGER,
+    completed_at INTEGER,
+    pickup_lat REAL,
+    pickup_lng REAL,
+    dropoff_lat REAL,
+    dropoff_lng REAL,
+    pickup_display TEXT,
+    dropoff_display TEXT,
+    created_at INTEGER,
+    updated_at INTEGER
+  )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ratings (
+    id TEXT PRIMARY KEY,
+    recorded_at INTEGER,
+    total_good INTEGER,
+    total_bad INTEGER,
+    satisfaction INTEGER,
+    delta_good INTEGER,
+    delta_bad INTEGER,
+    created_at INTEGER
+  )`).run();
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1`;
+    const r = await fetch(url, { headers: { "User-Agent": "uber-rating-tracker/1.0" } });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const a = d.address || {};
+    return {
+      name: d.name || a.shop || a.amenity || a.restaurant || a.fast_food || a.convenience || a.building || a.road || "店舗候補なし",
+      area: a.suburb || a.city_district || a.neighbourhood || a.city || a.town || a.village || "",
+      display_name: d.display_name || ""
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    if (request.method === "GET" && url.pathname === "/") return html(page());
+    if (request.method === "GET" && url.pathname === "/icon.svg") return text(appIcon, "image/svg+xml; charset=UTF-8");
+    if (request.method === "GET" && url.pathname === "/manifest.json") {
+      return json({
+        name: "Uber Rating Tracker",
+        short_name: "評価アプリ",
+        start_url: "/",
+        display: "standalone",
+        background_color: "#080a0c",
+        theme_color: "#028760",
+        icons: [{ src: "/icon.svg?v=stable-buttons-v2", sizes: "any", type: "image/svg+xml", purpose: "any maskable" }]
+      });
+    }
+    if (request.method === "GET" && url.pathname === "/sw.js") {
+      return text("self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());", "application/javascript; charset=UTF-8");
+    }
+    if (url.pathname === "/api/health") {
+      return json({ ok: true, service: "uber-rating-tracker", build: "stable-buttons-v2", hasDb: !!env.DB, time: new Date().toISOString() });
+    }
+    if (url.pathname === "/api/reverse-geocode") {
+      const lat = url.searchParams.get("lat");
+      const lng = url.searchParams.get("lng");
+      if (!lat || !lng) return json({ ok: false, error: "lat_lng_required" }, 400);
+      return json({ ok: true, result: await reverseGeocode(lat, lng) });
+    }
+
+    if (!env.DB) return json({ ok: false, error: "DB_NOT_CONNECTED" }, 503);
+    await setup(env);
+
+    if (url.pathname === "/api/orders" && request.method === "GET") {
+      const status = url.searchParams.get("status");
+      let stmt;
+      if (status) {
+        stmt = env.DB.prepare("SELECT * FROM order_items WHERE status = ? ORDER BY created_at DESC LIMIT 200").bind(status);
+      } else {
+        stmt = env.DB.prepare("SELECT * FROM order_items ORDER BY created_at DESC LIMIT 200");
+      }
+      const rows = await stmt.all();
+      return json({ ok: true, items: rows.results || [] });
+    }
+
+    if (url.pathname === "/api/orders" && request.method === "POST") {
+      const body = await request.json();
+      const now = Date.now();
+      const id = body.id || uid();
+      const row = await env.DB.prepare("SELECT COALESCE(MAX(seq),0)+1 AS n FROM order_items WHERE status='active'").first();
+      const seq = Number(row?.n || 1);
+      await env.DB.prepare(`INSERT INTO order_items
+        (id,status,seq,store_name,area,memo,pickup_at,completed_at,pickup_lat,pickup_lng,dropoff_lat,dropoff_lng,pickup_display,dropoff_display,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+        id,
+        "active",
+        seq,
+        String(body.store_name || ""),
+        String(body.area || ""),
+        String(body.memo || ""),
+        body.pickup_at || now,
+        null,
+        body.pickup_lat ?? null,
+        body.pickup_lng ?? null,
+        null,
+        null,
+        String(body.pickup_display || ""),
+        "",
+        now,
+        now
+      ).run();
+      return json({ ok: true, id, seq });
+    }
+
+    if (url.pathname.startsWith("/api/orders/") && request.method === "PUT") {
+      const id = decodeURIComponent(url.pathname.split("/").pop());
+      const body = await request.json();
+      const current = await env.DB.prepare("SELECT * FROM order_items WHERE id=?").bind(id).first();
+      if (!current) return json({ ok: false, error: "not_found" }, 404);
+      await env.DB.prepare(`UPDATE order_items SET
+        status=?, store_name=?, area=?, memo=?, completed_at=?, dropoff_lat=?, dropoff_lng=?, dropoff_display=?, updated_at=?
+        WHERE id=?`).bind(
+        body.status ?? current.status,
+        body.store_name ?? current.store_name,
+        body.area ?? current.area,
+        body.memo ?? current.memo,
+        body.completed_at ?? current.completed_at,
+        body.dropoff_lat ?? current.dropoff_lat,
+        body.dropoff_lng ?? current.dropoff_lng,
+        body.dropoff_display ?? current.dropoff_display,
+        Date.now(),
+        id
+      ).run();
+      return json({ ok: true });
+    }
+
+    if (url.pathname.startsWith("/api/orders/") && request.method === "DELETE") {
+      const id = decodeURIComponent(url.pathname.split("/").pop());
+      await env.DB.prepare("DELETE FROM order_items WHERE id=?").bind(id).run();
+      return json({ ok: true });
+    }
+
+    if (url.pathname === "/api/ratings" && request.method === "GET") {
+      const rows = await env.DB.prepare("SELECT * FROM ratings ORDER BY recorded_at DESC LIMIT 100").all();
+      return json({ ok: true, items: rows.results || [] });
+    }
+
+    if (url.pathname === "/api/ratings" && request.method === "POST") {
+      const body = await request.json();
+      const now = Date.now();
+      const good = Number(body.total_good || 0);
+      const bad = Number(body.total_bad || 0);
+      const satisfaction = good + bad > 0 ? Math.round(good / (good + bad) * 100) : 0;
+      const prev = await env.DB.prepare("SELECT total_good,total_bad FROM ratings ORDER BY recorded_at DESC LIMIT 1").first();
+      const deltaGood = prev ? good - Number(prev.total_good || 0) : 0;
+      const deltaBad = prev ? bad - Number(prev.total_bad || 0) : 0;
+      const id = uid();
+      await env.DB.prepare(`INSERT INTO ratings (id,recorded_at,total_good,total_bad,satisfaction,delta_good,delta_bad,created_at)
+        VALUES (?,?,?,?,?,?,?,?)`).bind(id, now, good, bad, satisfaction, deltaGood, deltaBad, now).run();
+      return json({ ok: true, id, satisfaction, delta_good: deltaGood, delta_bad: deltaBad });
+    }
+
+    return json({ ok: false, error: "NOT_FOUND" }, 404);
+  }
+};
+
+function page() {
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>評価アプリ</title>
+<link rel="manifest" href="/manifest.json?v=stable-buttons-v2">
+<link rel="icon" href="/icon.svg?v=stable-buttons-v2">
+<link rel="apple-touch-icon" href="/icon.svg?v=stable-buttons-v2">
+<meta name="theme-color" content="#028760">
+<style>
+:root{--bg:#080a0c;--card:#141820;--line:#2d3440;--green:#04b873;--green2:#028760;--red:#ff5d5d;--blue:#2b64ff;--muted:#9aa3b2;--orange:#ff9f43}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:radial-gradient(circle at top,#123326 0,#080a0c 38%);color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Noto Sans JP',sans-serif;padding:12px 12px 94px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.title{font-size:20px;font-weight:950}.sync{font-size:12px;border:1px solid #245c45;background:#10261d;color:#69efa9;border-radius:999px;padding:7px 10px}
+.card,.hero{background:rgba(20,24,32,.96);border:1px solid var(--line);border-radius:22px;padding:15px;margin-bottom:12px}.hero{border-color:#245c45;background:linear-gradient(160deg,#06291e,#141820 65%)}
+.cap{color:var(--muted);font-size:12px;font-weight:800}.sat{font-size:58px;font-weight:950}.grid,.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.box{background:rgba(255,255,255,.06);border-radius:18px;padding:13px}.num{font-size:30px;font-weight:950}.ok{color:#5be39a}.bad{color:var(--red)}
+.big{width:100%;border:0;border-radius:24px;min-height:118px;padding:20px;text-align:left;color:#fff;font-size:25px;font-weight:950;box-shadow:0 10px 24px rgba(0,0,0,.28);margin-bottom:12px}.big small{display:block;font-size:13px;margin-top:8px;opacity:.85}.pickup{background:linear-gradient(135deg,#ffb03a,#e66f00)}.save{background:linear-gradient(135deg,var(--green),var(--green2))}.ocr{background:linear-gradient(135deg,var(--blue),#182a70)}
+button{border:0;border-radius:15px;background:var(--green2);color:#fff;padding:13px;font-size:15px;font-weight:900;margin-top:8px}.danger{background:#633039}.secondary{background:#273142}
+.order{border:1px solid #303848;background:#10151d;border-radius:18px;padding:13px;margin-top:10px}.orderTop{display:flex;justify-content:space-between;gap:10px}.badge{background:#243327;color:#6bf3aa;border:1px solid #245c45;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900}.hint{font-size:13px;color:var(--muted);line-height:1.6}
+.tabs{position:fixed;left:10px;right:10px;bottom:8px;background:rgba(8,10,12,.95);border:1px solid var(--line);border-radius:20px;padding:8px;display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.tab{border-radius:14px;background:#202631;padding:12px 4px;font-size:12px}.screen{display:none}.screen.active{display:block}
+input{width:100%;background:#10151d;border:1px solid var(--line);border-radius:14px;color:#fff;font-size:16px;padding:13px;margin-top:9px}.toast{display:none;position:fixed;top:10px;left:12px;right:12px;background:#202631;border:1px solid var(--line);border-radius:16px;padding:13px;z-index:99}.toast.show{display:block}.file{display:none}
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<div class="top"><div class="title">評価アプリ</div><div id="sync" class="sync">起動中</div></div>
+
+<section id="home" class="screen active">
+  <div class="hero"><div class="cap">今の満足度</div><div id="sat" class="sat">--%</div><div class="grid"><div class="box"><div class="cap">GOOD</div><div id="good" class="num ok">--</div></div><div class="box"><div class="cap">BAD</div><div id="bad" class="num bad">--</div></div></div></div>
+  <button id="pickupBtn" class="big pickup" type="button">店舗ピックアップ追加<small>複数店舗OK / 押すと必ず反応します</small></button>
+  <button id="ocrHome" class="big ocr" type="button">評価を読む<small>まずはボタン反応確認</small></button>
+  <input id="homeFile" class="file" type="file" accept="image/*">
+  <div class="card"><div class="cap">未配達リスト</div><div id="activeList"></div></div>
+  <div class="card"><div class="cap">今日</div><div class="two"><div><div class="hint">未配達</div><div id="activeCount" class="num">0</div></div><div><div class="hint">完了</div><div id="doneCount" class="num">0</div></div></div></div>
+</section>
+
+<section id="ocr" class="screen"><div class="card"><div class="cap">OCR</div><button id="pickImage" class="ocr" type="button">スクショを選ぶ</button><input id="imageFile" class="file" type="file" accept="image/*"><div id="ocrBox" class="hint">OCRは次段階で再有効化します。</div></div><div class="card"><div class="cap">手動入力テスト</div><div class="two"><input id="manualGood" type="number" placeholder="GOOD"><input id="manualBad" type="number" placeholder="BAD"></div><button id="manualSave" type="button">保存</button></div></section>
+<section id="orders" class="screen"><div class="card"><div class="cap">未配達</div><div id="activeList2"></div></div></section>
+<section id="history" class="screen"><div class="card"><div class="cap">配達履歴</div><div id="doneList"></div></div><div class="card"><div class="cap">評価履歴</div><div id="ratingList"></div></div></section>
+<div class="tabs"><button class="tab" data-tab="home" type="button">ホーム</button><button class="tab" data-tab="ocr" type="button">OCR</button><button class="tab" data-tab="orders" type="button">配達</button><button class="tab" data-tab="history" type="button">履歴</button></div>
+
+<script>
+var active = [];
+var done = [];
+var ratings = [];
+function el(id){ return document.getElementById(id); }
+function toast(message){ var t=el('toast'); t.textContent=message; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},2200); }
+function fmt(time){ return new Date(Number(time)).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function esc(s){ return String(s || '').replace(/[&<>'"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]; }); }
+function vibrate(){ try{ if(navigator.vibrate) navigator.vibrate([30]); }catch(e){} }
+async function api(path, options){ var r = await fetch(path, options); if(!r.ok) throw new Error(String(r.status)); return await r.json(); }
+async function loadData(){
+  try{
+    el('sync').textContent='DB同期中';
+    active=(await api('/api/orders?status=active')).items || [];
+    done=(await api('/api/orders?status=done')).items || [];
+    ratings=(await api('/api/ratings')).items || [];
+    el('sync').textContent='DB同期OK';
+  }catch(e){
+    el('sync').textContent='DB読込エラー';
+    toast('DB読込エラー');
+  }
+  render();
+}
+function render(){
+  var latest=ratings[0];
+  if(latest){ el('sat').textContent=latest.satisfaction+'%'; el('good').textContent=latest.total_good; el('bad').textContent=latest.total_bad; }
+  else { el('sat').textContent='--%'; el('good').textContent='--'; el('bad').textContent='--'; }
+  el('activeCount').textContent=active.length;
+  el('doneCount').textContent=done.length;
+  var activeHtml=active.map(function(x){
+    return '<div class="order"><div class="orderTop"><div><span class="badge">#'+x.seq+'</span> <b>'+esc(x.store_name||'店舗未入力')+'</b><div class="hint">'+fmt(x.pickup_at)+' '+esc(x.area||'')+'</div></div></div><button class="save" type="button" onclick="completeOrder(\''+x.id+'\')">この注文を配達完了</button><button class="secondary" type="button" onclick="editOrder(\''+x.id+'\',true)">編集</button><button class="danger" type="button" onclick="deleteOrder(\''+x.id+'\')">削除</button></div>';
+  }).join('') || '<div class="hint">未配達はありません</div>';
+  el('activeList').innerHTML=activeHtml;
+  el('activeList2').innerHTML=activeHtml;
+  el('doneList').innerHTML=done.map(function(x){ return '<div class="order"><span class="badge">完了</span> <b>'+esc(x.store_name||'店舗未入力')+'</b><div class="hint">'+fmt(x.completed_at)+' '+esc(x.area||'')+'</div><button class="secondary" type="button" onclick="editOrder(\''+x.id+'\',false)">編集</button><button class="danger" type="button" onclick="deleteOrder(\''+x.id+'\')">削除</button></div>'; }).join('') || '<div class="hint">履歴なし</div>';
+  el('ratingList').innerHTML=ratings.map(function(x){ return '<div class="order"><b>👍 '+x.total_good+' / 👎 '+x.total_bad+'</b><div class="hint">'+fmt(x.recorded_at)+'</div></div>'; }).join('') || '<div class="hint">評価履歴なし</div>';
+}
+async function addPickup(){
+  toast('店舗ピックアップ反応OK');
+  vibrate();
+  var store = prompt('店舗名を入力してください', '店舗未入力');
+  if(store === null) return;
+  try{
+    await api('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_name:store,area:'',memo:'手動テスト登録',pickup_at:Date.now()})});
+    toast('ピックアップ追加しました');
+    await loadData();
+  }catch(e){ toast('追加エラー: '+e.message); }
+}
+async function completeOrder(id){
+  toast('配達完了ボタン反応OK');
+  vibrate();
+  try{
+    await api('/api/orders/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'done',completed_at:Date.now(),memo:'配達完了テスト'})});
+    toast('配達完了しました');
+    await loadData();
+  }catch(e){ toast('完了エラー: '+e.message); }
+}
+async function editOrder(id,isActive){
+  var list=isActive?active:done;
+  var x=list.find(function(v){return v.id===id;});
+  if(!x) return;
+  var s=prompt('店舗名',x.store_name||''); if(s===null)return;
+  var a=prompt('エリア',x.area||''); if(a===null)return;
+  try{
+    await api('/api/orders/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_name:s,area:a})});
+    toast('編集しました');
+    await loadData();
+  }catch(e){ toast('編集エラー: '+e.message); }
+}
+async function deleteOrder(id){
+  if(!confirm('削除しますか？')) return;
+  try{ await api('/api/orders/'+encodeURIComponent(id),{method:'DELETE'}); toast('削除しました'); await loadData(); }
+  catch(e){ toast('削除エラー: '+e.message); }
+}
+async function saveRatingManual(){
+  var g=Number(el('manualGood').value || 0);
+  var b=Number(el('manualBad').value || 0);
+  if(g+b===0){ toast('数字を入力してください'); return; }
+  try{ await api('/api/ratings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({total_good:g,total_bad:b})}); toast('評価を保存しました'); await loadData(); }
+  catch(e){ toast('評価保存エラー: '+e.message); }
+}
+window.completeOrder=completeOrder;
+window.editOrder=editOrder;
+window.deleteOrder=deleteOrder;
+function bindButtons(){
+  el('pickupBtn').onclick=addPickup;
+  el('ocrHome').onclick=function(){ toast('評価を読む反応OK'); document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');}); el('ocr').classList.add('active'); };
+  el('pickImage').onclick=function(){ toast('スクショボタン反応OK'); };
+  el('manualSave').onclick=saveRatingManual;
+  document.querySelectorAll('.tab').forEach(function(btn){ btn.onclick=function(){ toast(btn.textContent+'反応OK'); document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');}); el(btn.dataset.tab).classList.add('active'); }; });
+}
+bindButtons();
+loadData();
+toast('ボタン準備OK');
+</script>
+</body>
+</html>`;
+}

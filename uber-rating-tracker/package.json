@@ -1,0 +1,19 @@
+{
+  "name": "uber-rating-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Uber Eats delivery rating tracker PWA on Cloudflare Workers and D1",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create uber-rating-db",
+    "db:schema": "wrangler d1 execute uber-rating-db --file=./schema.sql",
+    "db:seed": "wrangler d1 execute uber-rating-db --file=./seed.sql",
+    "db:list": "wrangler d1 list",
+    "health": "echo Open /api/health after deploy"
+  },
+  "devDependencies": {
+    "wrangler": "latest"
+  }
+}

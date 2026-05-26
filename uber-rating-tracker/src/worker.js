@@ -29,6 +29,80 @@ function uid() {
   return crypto.randomUUID();
 }
 
+function hourJst(ms) {
+  return Number(new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    hour12: false
+  }).format(new Date(Number(ms || 0))));
+}
+
+function buildRiskAnalysis(ratingItems, deliveryItems) {
+  const badEvents = ratingItems
+    .filter(r => Number(r.delta_bad || 0) > 0)
+    .sort((a, b) => Number(b.recorded_at || 0) - Number(a.recorded_at || 0));
+
+  const latestBad = badEvents[0] || null;
+  let candidates = [];
+
+  if (latestBad) {
+    const badAt = Number(latestBad.recorded_at || 0);
+    candidates = deliveryItems
+      .filter(d => Number(d.completed_at || 0) <= badAt)
+      .sort((a, b) => Number(b.completed_at || 0) - Number(a.completed_at || 0))
+      .slice(0, 8);
+  }
+
+  const storeMap = new Map();
+  const areaMap = new Map();
+  const hourMap = new Map();
+
+  for (const d of deliveryItems) {
+    const store = String(d.store_name || "店舗未入力").trim() || "店舗未入力";
+    const area = String(d.area || "エリア未入力").trim() || "エリア未入力";
+    const h = String(hourJst(d.completed_at)).padStart(2, "0") + "時";
+
+    if (!storeMap.has(store)) storeMap.set(store, { key: store, deliveries: 0, bad_near: 0, score: 0 });
+    if (!areaMap.has(area)) areaMap.set(area, { key: area, deliveries: 0, bad_near: 0, score: 0 });
+    if (!hourMap.has(h)) hourMap.set(h, { key: h, deliveries: 0, bad_near: 0, score: 0 });
+
+    storeMap.get(store).deliveries += 1;
+    areaMap.get(area).deliveries += 1;
+    hourMap.get(h).deliveries += 1;
+  }
+
+  for (const bad of badEvents) {
+    const badAt = Number(bad.recorded_at || 0);
+    const near = deliveryItems
+      .filter(d => Number(d.completed_at || 0) <= badAt)
+      .sort((a, b) => Number(b.completed_at || 0) - Number(a.completed_at || 0))
+      .slice(0, 5);
+
+    for (const d of near) {
+      const store = String(d.store_name || "店舗未入力").trim() || "店舗未入力";
+      const area = String(d.area || "エリア未入力").trim() || "エリア未入力";
+      const h = String(hourJst(d.completed_at)).padStart(2, "0") + "時";
+      if (storeMap.has(store)) storeMap.get(store).bad_near += 1;
+      if (areaMap.has(area)) areaMap.get(area).bad_near += 1;
+      if (hourMap.has(h)) hourMap.get(h).bad_near += 1;
+    }
+  }
+
+  const rank = (map) => Array.from(map.values())
+    .map(x => ({ ...x, score: x.deliveries ? Math.round((x.bad_near / x.deliveries) * 100) : 0 }))
+    .sort((a, b) => (b.score - a.score) || (b.bad_near - a.bad_near) || (b.deliveries - a.deliveries))
+    .slice(0, 10);
+
+  return {
+    latest_bad_event: latestBad,
+    bad_candidates: candidates,
+    bad_events_count: badEvents.length,
+    store_risk: rank(storeMap),
+    area_risk: rank(areaMap),
+    hour_risk: rank(hourMap)
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -40,7 +114,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/sw.js") return text(serviceWorkerJs(), "application/javascript; charset=UTF-8");
 
     if (url.pathname === "/api/health") {
-      return json({ ok: true, service: "uber-rating-tracker", build: "mvp-charts-manual-v1", time: new Date().toISOString(), hasDb: !!env.DB });
+      return json({ ok: true, service: "uber-rating-tracker", build: "mvp-risk-analysis-v2", time: new Date().toISOString(), hasDb: !!env.DB });
     }
 
     if (url.pathname === "/api/ratings" && request.method === "GET") {
@@ -112,20 +186,14 @@ export default {
 
     if (url.pathname === "/api/analysis" && request.method === "GET") {
       const ratings = await env.DB.prepare(`
-        SELECT * FROM rating_snapshots ORDER BY recorded_at DESC LIMIT 50
+        SELECT * FROM rating_snapshots ORDER BY recorded_at DESC LIMIT 100
       `).all();
       const deliveries = await env.DB.prepare(`
-        SELECT * FROM deliveries ORDER BY completed_at DESC LIMIT 100
+        SELECT * FROM deliveries ORDER BY completed_at DESC LIMIT 300
       `).all();
       const ratingItems = ratings.results || [];
       const deliveryItems = deliveries.results || [];
-      const latestBad = ratingItems.find(r => Number(r.delta_bad || 0) > 0);
-      let candidates = [];
-      if (latestBad) {
-        const badAt = Number(latestBad.recorded_at || 0);
-        candidates = deliveryItems.filter(d => Number(d.completed_at || 0) <= badAt).slice(0, 8);
-      }
-      return json({ ok: true, latest_bad_event: latestBad || null, bad_candidates: candidates });
+      return json({ ok: true, ...buildRiskAnalysis(ratingItems, deliveryItems) });
     }
 
     return json({ ok: false, error: "Not found" }, 404);
@@ -165,7 +233,7 @@ return `<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 :root{--bg:#0f1115;--card:#171b22;--card2:#202631;--text:#fff;--muted:#9aa3b2;--green:#028760;--red:#ff5d5d;--yellow:#ffd166;--border:#2c3340}
-*{box-sizing:border-box} body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text);padding:14px;margin:0;padding-bottom:92px} h1{font-size:20px;margin:6px 0 14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:15px;margin-bottom:12px}.label{color:var(--muted);font-size:12px}.value{font-size:30px;font-weight:800;margin-top:6px;line-height:1.05}.mini{font-size:20px;font-weight:800;margin-top:4px}.ok{color:#5be39a}.bad{color:var(--red)}.warn{color:var(--yellow)}button{width:100%;padding:15px;border:0;border-radius:14px;background:var(--green);color:#fff;font-size:15px;font-weight:800;margin-top:10px}button.secondary{background:var(--card2)}button.danger{background:#5f2525}input,textarea{width:100%;padding:13px;margin-top:9px;border-radius:12px;border:1px solid var(--border);background:#11151c;color:#fff;font-size:16px}textarea{min-height:70px}.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;position:fixed;left:10px;right:10px;bottom:8px;background:rgba(15,17,21,.92);backdrop-filter:blur(10px);padding:8px;border-radius:18px;border:1px solid var(--border)}.tab{font-size:11px;padding:11px 4px;background:#222936;margin:0}.screen{display:none}.screen.active{display:block}.row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border);padding:10px 0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.hint{font-size:12px;color:var(--muted);line-height:1.7}.pill{display:inline-flex;padding:5px 9px;border-radius:999px;background:#222936;font-size:12px;margin-top:6px}.preview{white-space:pre-wrap;color:var(--muted);font-size:12px;max-height:110px;overflow:auto}.canvasWrap{height:220px}.status{position:fixed;top:10px;left:14px;right:14px;background:#202631;border:1px solid var(--border);padding:11px 13px;border-radius:14px;font-size:13px;z-index:10;display:none}.status.show{display:block}.twoInputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+*{box-sizing:border-box} body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;background:var(--bg);color:var(--text);padding:14px;margin:0;padding-bottom:92px} h1{font-size:20px;margin:6px 0 14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:15px;margin-bottom:12px}.label{color:var(--muted);font-size:12px}.value{font-size:30px;font-weight:800;margin-top:6px;line-height:1.05}.mini{font-size:20px;font-weight:800;margin-top:4px}.ok{color:#5be39a}.bad{color:var(--red)}.warn{color:var(--yellow)}button{width:100%;padding:15px;border:0;border-radius:14px;background:var(--green);color:#fff;font-size:15px;font-weight:800;margin-top:10px}button.secondary{background:var(--card2)}button.danger{background:#5f2525}input,textarea{width:100%;padding:13px;margin-top:9px;border-radius:12px;border:1px solid var(--border);background:#11151c;color:#fff;font-size:16px}textarea{min-height:70px}.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;position:fixed;left:10px;right:10px;bottom:8px;background:rgba(15,17,21,.92);backdrop-filter:blur(10px);padding:8px;border-radius:18px;border:1px solid var(--border)}.tab{font-size:11px;padding:11px 4px;background:#222936;margin:0}.screen{display:none}.screen.active{display:block}.row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border);padding:10px 0}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.hint{font-size:12px;color:var(--muted);line-height:1.7}.pill{display:inline-flex;padding:5px 9px;border-radius:999px;background:#222936;font-size:12px;margin-top:6px}.preview{white-space:pre-wrap;color:var(--muted);font-size:12px;max-height:110px;overflow:auto}.canvasWrap{height:220px}.status{position:fixed;top:10px;left:14px;right:14px;background:#202631;border:1px solid var(--border);padding:11px 13px;border-radius:14px;font-size:13px;z-index:10;display:none}.status.show{display:block}.twoInputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}.riskScore{font-weight:900}.rankItem{padding:10px 0;border-bottom:1px solid var(--border)}.bar{height:8px;border-radius:999px;background:#252d39;overflow:hidden;margin-top:7px}.bar span{display:block;height:100%;background:linear-gradient(90deg,#028760,#ffd166,#ff5d5d);border-radius:999px}
 </style>
 </head>
 <body>
@@ -219,6 +287,9 @@ return `<!DOCTYPE html>
 <section id="charts" class="screen">
   <div class="card"><div class="label">満足度推移</div><div class="canvasWrap"><canvas id="satChart"></canvas></div></div>
   <div class="card"><div class="label">GOOD / BAD 推移</div><div class="canvasWrap"><canvas id="countChart"></canvas></div></div>
+  <div class="card"><div class="label">店舗別 BAD候補ランキング</div><div id="storeRisk" class="hint">まだ分析データがありません。</div></div>
+  <div class="card"><div class="label">エリア別 BAD候補ランキング</div><div id="areaRisk" class="hint">まだ分析データがありません。</div></div>
+  <div class="card"><div class="label">時間帯別 BAD候補ランキング</div><div id="hourRisk" class="hint">まだ分析データがありません。</div></div>
 </section>
 
 <section id="history" class="screen">
@@ -230,7 +301,7 @@ return `<!DOCTYPE html>
   <button class="tab" data-screen="home">ホーム</button>
   <button class="tab" data-screen="ocr">OCR</button>
   <button class="tab" data-screen="delivery">配達</button>
-  <button class="tab" data-screen="charts">グラフ</button>
+  <button class="tab" data-screen="charts">分析</button>
   <button class="tab" data-screen="history">履歴</button>
 </div>
 
@@ -238,7 +309,7 @@ return `<!DOCTYPE html>
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
 const $=id=>document.getElementById(id);
 const fmt=t=>new Date(Number(t)).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-let latestRatings=[]; let latestDeliveries=[]; let satChart=null; let countChart=null;
+let latestRatings=[]; let latestDeliveries=[]; let latestAnalysis=null; let satChart=null; let countChart=null;
 
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(b.dataset.screen).classList.add('active'); if(b.dataset.screen==='charts') setTimeout(drawCharts,50);});
 function toast(msg,type='normal'){const el=$('status');el.textContent=msg;el.className='status show '+type;setTimeout(()=>{el.className='status'},2600)}
@@ -265,15 +336,27 @@ async function loadDeliveries(){
   $('deliveryList').innerHTML=items.map(x=>'<div class="row"><div><b>'+(x.store_name||'店舗未入力')+'</b><div class="hint">'+fmt(x.completed_at)+' / '+(x.area||'')+'<br>'+(x.memo||'')+'</div></div></div>').join('') || '<div class="hint">まだありません。</div>';
 }
 async function loadAnalysis(){
-  const data=await safeFetch('/api/analysis');
-  if(!data.latest_bad_event){$('badCandidates').textContent='BAD増加はまだ記録されていません。';return;}
+  const data=await safeFetch('/api/analysis'); latestAnalysis=data;
+  $('badEvents').textContent=data.bad_events_count||0;
+  if(!data.latest_bad_event){$('badCandidates').textContent='BAD増加はまだ記録されていません。';renderRisks(data);return;}
   $('badCandidates').innerHTML='<div class="pill bad">BAD '+signed(data.latest_bad_event.delta_bad)+'</div><div class="hint">記録時刻：'+fmt(data.latest_bad_event.recorded_at)+'</div>'+(data.bad_candidates||[]).map(d=>'<div class="row"><div><b>'+(d.store_name||'店舗未入力')+'</b><div>'+fmt(d.completed_at)+' '+(d.memo||'')+'</div></div></div>').join('');
+  renderRisks(data);
 }
+function renderRisks(data){
+  $('storeRisk').innerHTML=riskHtml(data.store_risk||[],'店舗');
+  $('areaRisk').innerHTML=riskHtml(data.area_risk||[],'エリア');
+  $('hourRisk').innerHTML=riskHtml(data.hour_risk||[],'時間帯');
+}
+function riskHtml(items,label){
+  if(!items.length)return '<div class="hint">まだ'+label+'分析に必要なデータがありません。</div>';
+  return items.map((x,i)=>'<div class="rankItem"><div class="row" style="border:0;padding:0"><div><b>'+(i+1)+'. '+escapeHtml(x.key)+'</b><div class="hint">配達 '+x.deliveries+'件 / BAD候補 '+x.bad_near+'回</div></div><div class="riskScore '+(x.score>=50?'bad':x.score>=25?'warn':'ok')+'">'+x.score+'%</div></div><div class="bar"><span style="width:'+Math.min(100,x.score)+'%"></span></div></div>').join('');
+}
+function escapeHtml(s){return String(s||'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function updateStats(){
   const ts=todayStart();
   $('todayDeliveries').textContent=latestDeliveries.filter(x=>Number(x.completed_at)>=ts).length;
   $('todayRatings').textContent=latestRatings.filter(x=>Number(x.recorded_at)>=ts).length;
-  $('badEvents').textContent=latestRatings.filter(x=>Number(x.delta_bad)>0).length;
+  if(!latestAnalysis) $('badEvents').textContent=latestRatings.filter(x=>Number(x.delta_bad)>0).length;
 }
 function drawCharts(){
   if(!window.Chart || !$('satChart')) return;

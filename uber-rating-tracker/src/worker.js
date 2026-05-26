@@ -1,68 +1,12 @@
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-
-    if (url.pathname === '/api/health') {
-      return new Response(JSON.stringify({ ok: true, build: 'no-js-debug-001', hasDb: !!env.DB, time: new Date().toISOString() }), {
-        headers: { 'content-type': 'application/json; charset=UTF-8', 'Access-Control-Allow-Origin': '*' }
-      });
-    }
-
-    if (url.pathname === '/debug-click') {
-      const name = url.searchParams.get('name') || 'unknown';
-      return page('CLICK OK: ' + name + ' / ' + new Date().toLocaleString('ja-JP'));
-    }
-
-    if (url.pathname === '/debug-api') {
-      let dbStatus = 'DB未確認';
-      try {
-        if (!env.DB) {
-          dbStatus = 'DB Bindingなし';
-        } else {
-          await env.DB.prepare('CREATE TABLE IF NOT EXISTS debug_clicks (id TEXT PRIMARY KEY, name TEXT, created_at INTEGER)').run();
-          await env.DB.prepare('INSERT INTO debug_clicks (id,name,created_at) VALUES (?,?,?)').bind(crypto.randomUUID(), 'api-test', Date.now()).run();
-          const row = await env.DB.prepare('SELECT COUNT(*) AS count FROM debug_clicks').first();
-          dbStatus = 'DB OK / count=' + row.count;
-        }
-      } catch (e) {
-        dbStatus = 'DB ERROR: ' + e.message;
-      }
-      return page(dbStatus);
-    }
-
-    return page('NO-JS DIAGNOSTIC READY');
-  }
-};
-
-function page(message) {
-  const safe = String(message || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  return new Response(`<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>評価アプリ NO-JS診断</title>
-<style>
-body{margin:0;background:#080a0c;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:18px 18px 80px}
-h1{font-size:38px;line-height:1.15;margin:30px 0}
-.card{background:#141820;border:1px solid #2d3440;border-radius:22px;padding:18px;margin:18px 0;font-size:18px;line-height:1.6}
-.log{background:#2a1114;border:1px solid #ff6b6b;color:#ffd2d2;border-radius:18px;padding:18px;margin:18px 0;font-size:16px;line-height:1.6;white-space:pre-wrap}
-a.btn{display:block;text-decoration:none;color:#fff;border-radius:26px;padding:32px 22px;margin:18px 0;font-size:30px;font-weight:900}
-.orange{background:linear-gradient(135deg,#ffb03a,#e66f00)}
-.blue{background:linear-gradient(135deg,#2b64ff,#182a70)}
-.green{background:linear-gradient(135deg,#04b873,#028760)}
-.gray{background:#202631}
-small{display:block;font-size:14px;margin-top:8px;opacity:.85}
-</style>
-</head>
-<body>
-<h1>評価アプリ<br>NO-JS診断</h1>
-<div class="card">JavaScriptを使わない診断画面です。押すとページが切り替われば、タップ自体は正常です。</div>
-<div class="log">${safe}</div>
-<a class="btn orange" href="/debug-click?name=pickup&v=${Date.now()}">店舗ピックアップ追加<small>リンク型テスト</small></a>
-<a class="btn blue" href="/debug-click?name=rating&v=${Date.now()}">評価を読む<small>リンク型テスト</small></a>
-<a class="btn green" href="/debug-api?v=${Date.now()}">DB / API確認<small>D1にテスト書き込み</small></a>
-<a class="btn gray" href="/?v=${Date.now()}">再読み込み<small>キャッシュ回避</small></a>
-</body>
-</html>`, { headers: { 'content-type': 'text/html; charset=UTF-8', 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
-}
+const H={"content-type":"text/html; charset=UTF-8","Cache-Control":"no-store"};
+const J={"content-type":"application/json; charset=UTF-8","Access-Control-Allow-Origin":"*"};
+const id=()=>crypto.randomUUID();
+const now=()=>Date.now();
+const e=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const dt=t=>t?new Date(Number(t)).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"--";
+async function fd(r){return Object.fromEntries((await r.formData()).entries())}
+async function setup(env){await env.DB.prepare("CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY,status TEXT,seq INTEGER,store TEXT,area TEXT,memo TEXT,pickup_at INTEGER,done_at INTEGER,created_at INTEGER,updated_at INTEGER)").run();await env.DB.prepare("CREATE TABLE IF NOT EXISTS ratings(id TEXT PRIMARY KEY,recorded_at INTEGER,good INTEGER,bad INTEGER,rate INTEGER,created_at INTEGER)").run()}
+function redir(q){return new Response(null,{status:303,headers:{Location:"/?m="+encodeURIComponent(q)}})}
+export default{async fetch(req,env){let u=new URL(req.url);if(u.pathname==="/api/health")return new Response(JSON.stringify({ok:true,build:"no-js-db-app-v1",hasDb:!!env.DB,time:new Date().toISOString()}),{headers:J});if(!env.DB)return new Response(page({err:"DB Bindingなし",active:[],done:[],ratings:[]}),{headers:H});await setup(env);if(req.method==="POST"&&u.pathname==="/add"){let f=await fd(req),r=await env.DB.prepare("SELECT COALESCE(MAX(seq),0)+1 n FROM orders WHERE status='active'").first();await env.DB.prepare("INSERT INTO orders(id,status,seq,store,area,memo,pickup_at,done_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(id(),"active",Number(r?.n||1),f.store||"店舗未入力",f.area||"",f.memo||"",now(),null,now(),now()).run();return redir("ピックアップ追加しました")}if(req.method==="POST"&&u.pathname.startsWith("/done/")){let oid=decodeURIComponent(u.pathname.split('/').pop());await env.DB.prepare("UPDATE orders SET status='done',done_at=?,updated_at=? WHERE id=?").bind(now(),now(),oid).run();return redir("配達完了しました")}if(req.method==="POST"&&u.pathname.startsWith("/edit/")){let oid=decodeURIComponent(u.pathname.split('/').pop()),f=await fd(req);await env.DB.prepare("UPDATE orders SET store=?,area=?,memo=?,updated_at=? WHERE id=?").bind(f.store||"",f.area||"",f.memo||"",now(),oid).run();return redir("編集しました")}if(req.method==="POST"&&u.pathname.startsWith("/del/")){let oid=decodeURIComponent(u.pathname.split('/').pop());await env.DB.prepare("DELETE FROM orders WHERE id=?").bind(oid).run();return redir("削除しました")}if(req.method==="POST"&&u.pathname==="/rating"){let f=await fd(req),g=Number(f.good||0),b=Number(f.bad||0),rate=g+b?Math.round(g/(g+b)*100):0;await env.DB.prepare("INSERT INTO ratings(id,recorded_at,good,bad,rate,created_at) VALUES(?,?,?,?,?,?)").bind(id(),now(),g,b,rate,now()).run();return redir("評価を保存しました")}let active=(await env.DB.prepare("SELECT * FROM orders WHERE status='active' ORDER BY pickup_at DESC LIMIT 100").all()).results||[],done=(await env.DB.prepare("SELECT * FROM orders WHERE status='done' ORDER BY done_at DESC LIMIT 100").all()).results||[],ratings=(await env.DB.prepare("SELECT * FROM ratings ORDER BY recorded_at DESC LIMIT 50").all()).results||[];return new Response(page({active,done,ratings,msg:u.searchParams.get('m')||"DB同期OK"}),{headers:H})}};
+function order(o,done){return `<div class=order><b>${done?"完了":"#"+e(o.seq)} ${e(o.store)}</b><div class=hint>${done?"完了":"取得"}: ${dt(done?o.done_at:o.pickup_at)} ${e(o.area)}</div>${o.memo?`<div class=hint>${e(o.memo)}</div>`:""}${done?"":`<form method=post action="/done/${e(o.id)}"><button class=green>この注文を配達完了</button></form>`}<details><summary>編集</summary><form method=post action="/edit/${e(o.id)}"><input name=store value="${e(o.store)}" placeholder=店舗名><input name=area value="${e(o.area)}" placeholder=エリア><input name=memo value="${e(o.memo)}" placeholder=メモ><button>保存</button></form></details><form method=post action="/del/${e(o.id)}"><button class=red>削除</button></form></div>`}
+function page({active,done,ratings,msg,err}){let r=ratings[0];return `<!doctype html><html lang=ja><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>評価アプリ</title><style>body{margin:0;background:#080a0c;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:16px 16px 70px}.top{font-size:30px;font-weight:900}.card,.hero,.order{background:#141820;border:1px solid #2d3440;border-radius:22px;padding:16px;margin:14px 0}.msg{background:#2a1114;border:1px solid #ff6b6b;color:#ffd2d2;border-radius:18px;padding:14px;margin:14px 0}.sat{font-size:58px;font-weight:950}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.box{background:#202631;border-radius:18px;padding:14px}.num{font-size:30px;font-weight:900}.ok{color:#5be39a}.bad{color:#ff6b6b}.hint{color:#9aa3b2;font-size:13px;line-height:1.6}.big{width:100%;border:0;border-radius:24px;padding:25px 18px;margin:12px 0;color:#fff;font-size:26px;font-weight:900;text-align:left}.orange{background:linear-gradient(135deg,#ffb03a,#e66f00)}.blue{background:linear-gradient(135deg,#2b64ff,#182a70)}button{border:0;border-radius:14px;background:#028760;color:#fff;padding:13px 14px;font-weight:900;margin:8px 4px 0 0}.green{background:#028760}.red{background:#633039}input{width:100%;background:#10151d;border:1px solid #2d3440;border-radius:14px;color:#fff;font-size:16px;padding:13px;margin-top:9px}a{color:#8bdcff}.tabs{position:sticky;bottom:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:#080a0c;padding:8px;border:1px solid #2d3440;border-radius:18px}.tabs a{text-align:center;text-decoration:none;background:#202631;color:#fff;border-radius:14px;padding:13px;font-weight:900}</style></head><body><div class=top>評価アプリ</div><div class=msg>${e(err||msg)} / build: no-js-db-app-v1</div><div id=home class=hero><div class=hint>今の満足度</div><div class=sat>${r?e(r.rate)+"%":"--%"}</div><div class=grid><div class=box><div class=hint>GOOD</div><div class="num ok">${r?e(r.good):"--"}</div></div><div class=box><div class=hint>BAD</div><div class="num bad">${r?e(r.bad):"--"}</div></div></div></div><form method=post action=/add><input name=store placeholder=店舗名><input name=area placeholder=エリア><input name=memo placeholder=メモ><button class="big orange">店舗ピックアップ追加<br><small>複数店舗OK・JSなし</small></button></form><div id=orders class=card><h2>未配達リスト</h2>${active.length?active.map(x=>order(x,false)).join(""):"<div class=hint>未配達はありません</div>"}</div><div class=card><h2>評価保存</h2><form method=post action=/rating><div class=grid><input name=good inputmode=numeric placeholder=GOOD><input name=bad inputmode=numeric placeholder=BAD></div><button class="big blue">評価を保存</button></form></div><div id=history class=card><h2>配達履歴</h2>${done.length?done.map(x=>order(x,true)).join(""):"<div class=hint>履歴はありません</div>"}</div><div class=card><h2>評価履歴</h2>${ratings.length?ratings.map(x=>`<div class=order><b>👍 ${e(x.good)} / 👎 ${e(x.bad)}</b><div class=hint>${dt(x.recorded_at)} / ${e(x.rate)}%</div></div>`).join(""):"<div class=hint>評価履歴はありません</div>"}</div><div class=tabs><a href=#home>ホーム</a><a href=#orders>配達</a><a href=#history>履歴</a></div></body></html>`}

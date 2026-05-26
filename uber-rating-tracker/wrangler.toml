@@ -4,3 +4,8 @@ compatibility_date = "2026-05-26"
 
 [vars]
 APP_NAME = "Uber Rating Tracker"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "uber-rating-db"
+database_id = "dc4a2db4-fe78-41da-8465-b927e7489af5"

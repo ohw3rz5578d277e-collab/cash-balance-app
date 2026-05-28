@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "uber-rating-tracker",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-05-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "uber-rating-db",
+      "database_id": "dc4a2db4-fe78-41da-8465-b927e7489af5"
+    }
+  ]
+}

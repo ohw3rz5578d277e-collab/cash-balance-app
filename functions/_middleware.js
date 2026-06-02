@@ -9,7 +9,7 @@ export async function onRequest(context) {
   // Runtime HTML/JS patch
   // - Move Uber pending/payment input from Home to Sales tab
   // - Treat combined sales as POS cash sales + Uber receivable/payment
-  // - Keep cash difference calculation unchanged
+  // - Keep cash difference calculation based on actual cash only
   // ------------------------------------------------------
   const replacements = [
     [
@@ -30,7 +30,11 @@ export async function onRequest(context) {
     ],
     [
       `sales=posSales+received+tips,dailySales=money(r.dailySales),appProfit=dailySales-gasCost,expected=start+sales+exchange-gasCost-uber;`,
-      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost-uber;`
+      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`
+    ],
+    [
+      `['Uber調整',-c.uberPending,c.uberPending>=0?'受取待ち控除':'支払い予定加算']`,
+      `['Uber受取/支払',c.uberPending,'差異には反映しない']`
     ],
     [
       `sales:sales,dailySales:dailySales,appProfit:appProfit,gasCost:gasCost`,
@@ -147,7 +151,7 @@ export async function onRequest(context) {
     var note = document.createElement('div');
     note.id = 'uber-sales-note';
     note.className = 'notice';
-    note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定で計算します。支払い予定はマイナスで入力してください。';
+    note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定で計算します。<br><b>差異：</b> Uber受取待ち/支払い予定は、手元の現金ではないため最終差異には反映しません。';
     panel.appendChild(note);
   }
   function run(){

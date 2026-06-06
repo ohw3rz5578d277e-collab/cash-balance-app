@@ -10,6 +10,7 @@ export async function onRequest(context) {
   // - Move Uber pending/payment input from Home to Sales tab
   // - Treat combined sales as POS cash sales + Uber receivable/payment
   // - Keep cash difference calculation based on actual cash only
+  // - Allow minus input for Uber receivable/payment on smartphone keyboards
   // ------------------------------------------------------
   const replacements = [
     [
@@ -18,7 +19,7 @@ export async function onRequest(context) {
     ],
     [
       `<div class="salesInputGrid"><div><label>日付</label><input id="salesDateMirror" type="date"></div><div><label>その日のアプリ売上</label><input id="dailySales" type="number" inputmode="numeric" placeholder="例：12800"></div><div><label>売上メモ</label><input id="salesMemo" placeholder="例：雨 / クエスト込み"></div></div>`,
-      `<div class="salesInputGrid"><div><label>日付</label><input id="salesDateMirror" type="date"></div><div><label>Uberアプリ売上（確認用）</label><input id="dailySales" type="number" inputmode="numeric" placeholder="例：12800"></div><div><label>Uber受取待ち / 支払い予定</label><input id="uberPending" type="number" inputmode="numeric" placeholder="受取待ち: 3000 / 支払い: -1000"></div><div><label>売上メモ</label><input id="salesMemo" placeholder="例：雨 / クエスト込み"></div></div>`
+      `<div class="salesInputGrid"><div><label>日付</label><input id="salesDateMirror" type="date"></div><div><label>Uberアプリ売上（確認用）</label><input id="dailySales" type="number" inputmode="numeric" placeholder="例：12800"></div><div><label>Uber受取待ち / 支払い予定</label><input id="uberPending" type="text" inputmode="text" pattern="-?[0-9]*" placeholder="受取待ち: 3000 / 支払い: -1000"></div><div><label>売上メモ</label><input id="salesMemo" placeholder="例：雨 / クエスト込み"></div></div>`
     ],
     [
       `<b>利益：</b> アプリ売上 − ガソリン代。月・週・日で自動集計します。`,
@@ -151,14 +152,33 @@ export async function onRequest(context) {
     var note = document.createElement('div');
     note.id = 'uber-sales-note';
     note.className = 'notice';
-    note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定で計算します。<br><b>差異：</b> Uber受取待ち/支払い予定は、手元の現金ではないため最終差異には反映しません。';
+    note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定で計算します。<br><b>差異：</b> Uber受取待ち/支払い予定は、手元の現金ではないため最終差異には反映しません。<br><b>マイナス入力：</b> 支払い予定は -537 のように半角マイナスを付けて入力してください。';
     panel.appendChild(note);
+  }
+  function fixUberMinusInput(){
+    var input = document.getElementById('uberPending');
+    if(!input || input.dataset.minusReady === '1') return;
+    input.dataset.minusReady = '1';
+    input.setAttribute('type','text');
+    input.setAttribute('inputmode','text');
+    input.setAttribute('pattern','-?[0-9]*');
+    input.setAttribute('placeholder','受取待ち: 3000 / 支払い: -1000');
+    input.addEventListener('input', function(){
+      var v = input.value.replace(/[−－ー―]/g, '-').replace(/[^0-9-]/g, '');
+      if(v.indexOf('-') > 0) v = v.replace(/-/g, '');
+      if(v.length > 1) v = v.charAt(0) + v.slice(1).replace(/-/g, '');
+      if(input.value !== v){
+        input.value = v;
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+      }
+    });
   }
   function run(){
     filterMonthList('historyList', '前月以前の履歴');
     filterMonthList('salesHistoryList', '前月以前の売上詳細');
     labelCurrentMonthCards();
     addSalesNote();
+    fixUberMinusInput();
   }
   var timer = null;
   var observer = new MutationObserver(function(){

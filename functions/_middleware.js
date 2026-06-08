@@ -8,7 +8,7 @@ export async function onRequest(context) {
   // ------------------------------------------------------
   // Runtime HTML/JS patch
   // - Move Uber pending/payment input from Home to Sales tab
-  // - Treat combined sales as POS cash sales + Uber receivable/payment
+  // - Treat combined sales as POS cash sales + Uber receivable/payment + tips
   // - Keep cash difference calculation based on actual cash only
   // - Allow minus input for Uber receivable/payment on smartphone keyboards
   // ------------------------------------------------------
@@ -23,7 +23,7 @@ export async function onRequest(context) {
     ],
     [
       `<b>利益：</b> アプリ売上 − ガソリン代。月・週・日で自動集計します。`,
-      `<b>利益：</b> 合算売上（POS売上 + Uber受取待ち/支払い予定）− ガソリン代。月・週・日で自動集計します。`
+      `<b>利益：</b> 合算売上（POS売上 + Uber受取待ち/支払い予定 + Tip）− ガソリン代。月・週・日で自動集計します。`
     ],
     [
       `@media(min-width:760px){.grid{grid-template-columns:repeat(4,1fr)}.salesInputGrid{grid-template-columns:1fr 1fr 1fr}.expenseGrid{grid-template-columns:1fr 1fr 1fr 1.2fr}}`,
@@ -31,7 +31,11 @@ export async function onRequest(context) {
     ],
     [
       `sales=posSales+received+tips,dailySales=money(r.dailySales),appProfit=dailySales-gasCost,expected=start+sales+exchange-gasCost-uber;`,
-      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`
+      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome+tips,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`
+    ],
+    [
+      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`,
+      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome+tips,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`
     ],
     [
       `['Uber調整',-c.uberPending,c.uberPending>=0?'受取待ち控除':'支払い予定加算']`,
@@ -47,11 +51,19 @@ export async function onRequest(context) {
     ],
     [
       `salesCard('今日のアプリ売上',d.sales,'売上タブの日別入力','')+salesCard('今日の利益',d.profit,'売上 − ガソリン','profit')+salesCard('今週のアプリ売上',w.sales,'選択日の週で集計','')+salesCard('今週の利益',w.profit,'週売上 − 週ガソリン','profit')+salesCard('今月のアプリ売上',m.sales,'選択日の月で集計','month')+salesCard('今月の利益',m.profit,'月売上 − 月ガソリン','profit')`,
-      `salesCard('今日の合算売上',d.sales,'POS売上 + Uber受取/支払い','')+salesCard('今日の利益',d.profit,'合算売上 − ガソリン','profit')+salesCard('今週の合算売上',w.sales,'POS + Uberを週集計','')+salesCard('今週の利益',w.profit,'週合算売上 − 週ガソリン','profit')+salesCard('今月の合算売上',m.sales,'POS + Uberを月集計','month')+salesCard('今月の利益',m.profit,'月合算売上 − 月ガソリン','profit')`
+      `salesCard('今日の合算売上',d.sales,'POS売上 + Uber + Tip','')+salesCard('今日の利益',d.profit,'合算売上 − ガソリン','profit')+salesCard('今週の合算売上',w.sales,'POS + Uber + Tip','')+salesCard('今週の利益',w.profit,'週合算売上 − 週ガソリン','profit')+salesCard('今月の合算売上',m.sales,'POS + Uber + Tip','month')+salesCard('今月の利益',m.profit,'月合算売上 − 月ガソリン','profit')`
+    ],
+    [
+      `salesCard('今日の合算売上',d.sales,'POS売上 + Uber受取/支払い','')+salesCard('今日の利益',d.profit,'合算売上 − ガソリン','profit')+salesCard('今週の合算売上',w.sales,'POS + Uberを週集計','')+salesCard('今週の利益',w.profit,'週合算売上 − 週ガソリン','profit')+salesCard('今月の合算売上',m.sales,'POS + Uberを月集計','month')+salesCard('今月の利益',m.profit,'月合算売上 − 月ガソリン','profit')`,
+      `salesCard('今日の合算売上',d.sales,'POS売上 + Uber + Tip','')+salesCard('今日の利益',d.profit,'合算売上 − ガソリン','profit')+salesCard('今週の合算売上',w.sales,'POS + Uber + Tip','')+salesCard('今週の利益',w.profit,'週合算売上 − 週ガソリン','profit')+salesCard('今月の合算売上',m.sales,'POS + Uber + Tip','month')+salesCard('今月の利益',m.profit,'月合算売上 − 月ガソリン','profit')`
     ],
     [
       `アプリ売上 '+yen(c.dailySales)+' / ガソリン`,
-      `合算売上 '+yen(c.combinedSales)+' / Uber確認 '+yen(c.dailySales)+' / ガソリン`
+      `合算売上 '+yen(c.combinedSales)+' / Uber確認 '+yen(c.dailySales)+' / Tip '+yen(c.tips)+' / ガソリン`
+    ],
+    [
+      `合算売上 '+yen(c.combinedSales)+' / Uber確認 '+yen(c.dailySales)+' / ガソリン`,
+      `合算売上 '+yen(c.combinedSales)+' / Uber確認 '+yen(c.dailySales)+' / Tip '+yen(c.tips)+' / ガソリン`
     ],
     [
       `アプリ売上 '+yen(c.dailySales)+' / 差異`,
@@ -59,7 +71,11 @@ export async function onRequest(context) {
     ],
     [
       `青・紫・緑系カードはアプリ売上入力用です。金種管理とは別で集計します。`,
-      `青・紫・緑系カードは売上集計用です。POS売上とUber受取/支払い予定を合算して表示します。`
+      `青・紫・緑系カードは売上集計用です。POS売上、Uber受取/支払い予定、Tipを合算して表示します。`
+    ],
+    [
+      `青・紫・緑系カードは売上集計用です。POS売上とUber受取/支払い予定を合算して表示します。`,
+      `青・紫・緑系カードは売上集計用です。POS売上、Uber受取/支払い予定、Tipを合算して表示します。`
     ]
   ];
 
@@ -152,7 +168,7 @@ export async function onRequest(context) {
     var note = document.createElement('div');
     note.id = 'uber-sales-note';
     note.className = 'notice';
-    note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定で計算します。<br><b>差異：</b> Uber受取待ち/支払い予定は、手元の現金ではないため最終差異には反映しません。<br><b>マイナス入力：</b> 支払い予定は -537 のように半角マイナスを付けて入力してください。';
+    note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定 + Tipで計算します。<br><b>利益：</b> 合算売上からガソリン代を引いて計算します。過去分のPOS明細に入っているTipも反映されます。<br><b>差異：</b> Uber受取待ち/支払い予定は、手元の現金ではないため最終差異には反映しません。<br><b>マイナス入力：</b> 支払い予定は -537 のように半角マイナスを付けて入力してください。';
     panel.appendChild(note);
   }
   function fixUberMinusInput(){

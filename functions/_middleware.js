@@ -11,6 +11,7 @@ export async function onRequest(context) {
   // - Treat combined sales as POS cash sales + Uber receivable/payment + tips
   // - Keep cash difference calculation based on actual cash only
   // - Allow minus input for Uber receivable/payment on smartphone keyboards
+  // - Add default cash count button on Start cash screen
   // ------------------------------------------------------
   const replacements = [
     [
@@ -90,12 +91,98 @@ export async function onRequest(context) {
   var current = new Date();
   var currentYear = current.getFullYear();
   var currentMonth = current.getMonth() + 1;
+  var START_DEFAULTS = [
+    {keys:['1万円札','10000'], count:0},
+    {keys:['5千円札','5000'], count:1},
+    {keys:['2千円札','2000'], count:0},
+    {keys:['千円札','1000'], count:10},
+    {keys:['500円玉','500'], count:8},
+    {keys:['100円玉','100'], count:15},
+    {keys:['50円玉','50'], count:10},
+    {keys:['10円玉','10'], count:15},
+    {keys:['5円玉','5'], count:10},
+    {keys:['1円玉','1'], count:15}
+  ];
+
   function monthKeyFromText(text){
     var m = String(text||'').match(/(\\d{4})年(\\d{1,2})月/);
     if(!m) return '';
     return m[1] + '-' + String(m[2]).padStart(2,'0');
   }
   function currentKey(){return currentYear + '-' + String(currentMonth).padStart(2,'0');}
+
+  function startView(){
+    var exact = document.getElementById('view-start') || document.getElementById('view-startCash') || document.getElementById('view-start-cash');
+    if(exact) return exact;
+    var views = Array.from(document.querySelectorAll('.view, section, .panel'));
+    return views.find(function(el){
+      return el.textContent && el.textContent.includes('開始時') && el.querySelector('.mrow');
+    }) || null;
+  }
+  function setInputValue(input, value){
+    if(!input) return;
+    input.value = String(value);
+    input.dispatchEvent(new Event('input', {bubbles:true}));
+    input.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+  function defaultForRow(row){
+    var text = row.textContent || '';
+    for(var i=0;i<START_DEFAULTS.length;i++){
+      var d = START_DEFAULTS[i];
+      if(d.keys.some(function(k){return text.includes(k);})) return d.count;
+    }
+    return null;
+  }
+  function startRows(){
+    var view = startView();
+    if(!view) return [];
+    return Array.from(view.querySelectorAll('.mrow')).map(function(row){
+      return {row:row, input:row.querySelector('input.cinput, .cinput')};
+    }).filter(function(x){return x.input && defaultForRow(x.row) !== null;});
+  }
+  function isStartAllEmpty(){
+    var rows = startRows();
+    return rows.length > 0 && rows.every(function(x){
+      var v = String(x.input.value || '').trim();
+      return v === '' || v === '0';
+    });
+  }
+  function applyStartDefaults(force){
+    var rows = startRows();
+    if(!rows.length) return false;
+    if(!force && !isStartAllEmpty()) return false;
+    rows.forEach(function(x){
+      var v = defaultForRow(x.row);
+      setInputValue(x.input, v);
+    });
+    return true;
+  }
+  function ensureDefaultButton(){
+    var view = startView();
+    if(!view || document.getElementById('start-default-cash-button')) return;
+    var btn = document.createElement('button');
+    btn.id = 'start-default-cash-button';
+    btn.type = 'button';
+    btn.className = 'btn lightbtn';
+    btn.textContent = 'デフォルト値を反映';
+    btn.style.margin = '0 0 12px 0';
+    btn.style.width = '100%';
+    btn.addEventListener('click', function(){ applyStartDefaults(true); });
+    var h = Array.from(view.querySelectorAll('h2,.head')).find(function(el){return el.textContent && el.textContent.includes('開始時');});
+    if(h && h.parentElement){
+      h.insertAdjacentElement('afterend', btn);
+    }else{
+      var firstMoney = view.querySelector('.money') || view.querySelector('.mrow');
+      if(firstMoney) firstMoney.insertAdjacentElement('beforebegin', btn);
+      else view.prepend(btn);
+    }
+  }
+  function autoApplyStartDefaults(){
+    var view = startView();
+    if(!view) return;
+    if(isStartAllEmpty()) applyStartDefaults(false);
+  }
+
   function ensurePastBox(targetId, title){
     var target = document.getElementById(targetId);
     if(!target) return null;
@@ -190,6 +277,8 @@ export async function onRequest(context) {
     });
   }
   function run(){
+    ensureDefaultButton();
+    autoApplyStartDefaults();
     filterMonthList('historyList', '前月以前の履歴');
     filterMonthList('salesHistoryList', '前月以前の売上詳細');
     labelCurrentMonthCards();
@@ -203,7 +292,9 @@ export async function onRequest(context) {
   });
   window.addEventListener('DOMContentLoaded', function(){
     run();
-    observer.observe(document.body, {childList:true, subtree:true});
+    if(document.body) observer.observe(document.body, {childList:true, subtree:true});
+    setTimeout(run, 400);
+    setTimeout(run, 1200);
   });
 })();
 </script>

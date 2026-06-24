@@ -5,15 +5,6 @@ export async function onRequest(context) {
 
   let html = await response.text();
 
-  // ------------------------------------------------------
-  // Runtime HTML/JS patch
-  // - Move Uber pending/payment input from Home to Sales tab
-  // - Treat combined sales as POS cash sales + Uber receivable/payment + tips
-  // - Keep cash difference calculation based on actual cash only
-  // - Allow minus input for Uber receivable/payment on smartphone keyboards
-  // - Add default cash count button on Start cash screen
-  // - Do NOT auto-fill defaults; fill only when button is pressed
-  // ------------------------------------------------------
   const replacements = [
     [
       `<div><label>Uber受取待ち / 支払い予定</label><input id="uberPending" type="number" inputmode="numeric" placeholder="受取待ち: 3000 / 支払い: -1000"></div>`,
@@ -22,6 +13,14 @@ export async function onRequest(context) {
     [
       `<div class="salesInputGrid"><div><label>日付</label><input id="salesDateMirror" type="date"></div><div><label>その日のアプリ売上</label><input id="dailySales" type="number" inputmode="numeric" placeholder="例：12800"></div><div><label>売上メモ</label><input id="salesMemo" placeholder="例：雨 / クエスト込み"></div></div>`,
       `<div class="salesInputGrid"><div><label>日付</label><input id="salesDateMirror" type="date"></div><div><label>Uberアプリ売上（確認用）</label><input id="dailySales" type="number" inputmode="numeric" placeholder="例：12800"></div><div><label>Uber受取待ち / 支払い予定</label><input id="uberPending" type="text" inputmode="text" pattern="-?[0-9]*" placeholder="受取待ち: 3000 / 支払い: -1000"></div><div><label>売上メモ</label><input id="salesMemo" placeholder="例：雨 / クエスト込み"></div></div>`
+    ],
+    [
+      `<div class="posSubBtns"><button class="postip" id="tipChangeButton" type="button">Tip</button><button class="posclear" id="clearPosButton" type="button">入力クリア</button></div>`,
+      `<div class="posSubBtns"><button class="postip" id="tipChangeButton" type="button">Tip</button><button class="postip tipfraction" id="tipFractionButton" type="button">Tip端数</button><button class="posclear" id="clearPosButton" type="button">入力クリア</button></div>`
+    ],
+    [
+      `.posSubBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}`,
+      `.posSubBtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}`
     ],
     [
       `<b>利益：</b> アプリ売上 − ガソリン代。月・週・日で自動集計します。`,
@@ -104,6 +103,65 @@ export async function onRequest(context) {
     {keys:['5円玉','5'], count:10},
     {keys:['1円玉','1'], count:15}
   ];
+
+  function amountFromText(text){
+    var n = String(text || '').replace(/[^0-9-]/g,'');
+    return Number(n || 0);
+  }
+  function clickKey(k){
+    var b = document.querySelector('.key[data-key="'+k+'"]');
+    if(b) b.click();
+  }
+  function typeAmount(n){
+    String(Math.max(0, Math.floor(Number(n || 0)))).split('').forEach(function(ch){clickKey(ch);});
+  }
+  function setPaidByKeypad(n){
+    var paid = document.querySelector('.modeBtn[data-mode="paid"]');
+    if(paid) paid.click();
+    clickKey('C');
+    typeAmount(n);
+  }
+  function applyFractionTip(){
+    var sale = amountFromText(document.getElementById('posSaleView') && document.getElementById('posSaleView').textContent);
+    var paid = amountFromText(document.getElementById('posPaidView') && document.getElementById('posPaidView').textContent);
+    var change = Math.max(0, paid - sale);
+    var fraction = change % 1000;
+    if(!sale || !paid || change <= 0 || fraction <= 0){
+      alert('Tip端数にできるおつりがありません。');
+      return;
+    }
+    var tipBtn = document.getElementById('tipChangeButton');
+    if(!tipBtn){
+      alert('Tipボタンが見つかりません。');
+      return;
+    }
+    var temporaryPaid = sale + fraction;
+    setPaidByKeypad(temporaryPaid);
+    setTimeout(function(){
+      tipBtn.click();
+      setTimeout(function(){ setPaidByKeypad(paid); }, 80);
+    }, 80);
+  }
+  function ensureTipFractionButton(){
+    var area = document.querySelector('.posSubBtns');
+    if(!area) return;
+    area.style.gridTemplateColumns = '1fr 1fr 1fr';
+    var tip = document.getElementById('tipChangeButton');
+    var clear = document.getElementById('clearPosButton');
+    var btn = document.getElementById('tipFractionButton');
+    if(!btn){
+      btn = document.createElement('button');
+      btn.id = 'tipFractionButton';
+      btn.type = 'button';
+      btn.className = 'postip tipfraction';
+      btn.textContent = 'Tip端数';
+      if(clear) area.insertBefore(btn, clear); else area.appendChild(btn);
+    }
+    if(btn.dataset.ready !== '1'){
+      btn.dataset.ready = '1';
+      btn.addEventListener('click', applyFractionTip);
+    }
+  }
 
   function monthKeyFromText(text){
     var m = String(text||'').match(/(\\d{4})年(\\d{1,2})月/);
@@ -265,6 +323,7 @@ export async function onRequest(context) {
     });
   }
   function run(){
+    ensureTipFractionButton();
     ensureDefaultButton();
     filterMonthList('historyList', '前月以前の履歴');
     filterMonthList('salesHistoryList', '前月以前の売上詳細');

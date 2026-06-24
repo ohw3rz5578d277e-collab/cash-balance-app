@@ -12,6 +12,7 @@ export async function onRequest(context) {
   // - Keep cash difference calculation based on actual cash only
   // - Allow minus input for Uber receivable/payment on smartphone keyboards
   // - Add default cash count button on Start cash screen
+  // - Do NOT auto-fill defaults; fill only when button is pressed
   // ------------------------------------------------------
   const replacements = [
     [
@@ -140,17 +141,9 @@ export async function onRequest(context) {
       return {row:row, input:row.querySelector('input.cinput, .cinput')};
     }).filter(function(x){return x.input && defaultForRow(x.row) !== null;});
   }
-  function isStartAllEmpty(){
-    var rows = startRows();
-    return rows.length > 0 && rows.every(function(x){
-      var v = String(x.input.value || '').trim();
-      return v === '' || v === '0';
-    });
-  }
-  function applyStartDefaults(force){
+  function applyStartDefaults(){
     var rows = startRows();
     if(!rows.length) return false;
-    if(!force && !isStartAllEmpty()) return false;
     rows.forEach(function(x){
       var v = defaultForRow(x.row);
       setInputValue(x.input, v);
@@ -167,7 +160,7 @@ export async function onRequest(context) {
     btn.textContent = 'デフォルト値を反映';
     btn.style.margin = '0 0 12px 0';
     btn.style.width = '100%';
-    btn.addEventListener('click', function(){ applyStartDefaults(true); });
+    btn.addEventListener('click', function(){ applyStartDefaults(); });
     var h = Array.from(view.querySelectorAll('h2,.head')).find(function(el){return el.textContent && el.textContent.includes('開始時');});
     if(h && h.parentElement){
       h.insertAdjacentElement('afterend', btn);
@@ -176,11 +169,6 @@ export async function onRequest(context) {
       if(firstMoney) firstMoney.insertAdjacentElement('beforebegin', btn);
       else view.prepend(btn);
     }
-  }
-  function autoApplyStartDefaults(){
-    var view = startView();
-    if(!view) return;
-    if(isStartAllEmpty()) applyStartDefaults(false);
   }
 
   function ensurePastBox(targetId, title){
@@ -278,7 +266,6 @@ export async function onRequest(context) {
   }
   function run(){
     ensureDefaultButton();
-    autoApplyStartDefaults();
     filterMonthList('historyList', '前月以前の履歴');
     filterMonthList('salesHistoryList', '前月以前の売上詳細');
     labelCurrentMonthCards();

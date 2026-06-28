@@ -16,7 +16,7 @@ export async function onRequest(context) {
     ],
     [
       `<div class="posSubBtns"><button class="postip" id="tipChangeButton" type="button">Tip</button><button class="posclear" id="clearPosButton" type="button">入力クリア</button></div>`,
-      `<div class="posSubBtns"><button class="postip" id="tipChangeButton" type="button">Tip</button><button class="postip tipfraction" id="tipFractionButton" type="button">Tip端数</button><button class="posclear" id="clearPosButton" type="button">入力クリア</button></div>`
+      `<div class="posSubBtns"><button class="postip" id="tipChangeButton" type="button">Tip</button><button class="postip tipamount" id="tipAmountButton" type="button">チップ指定</button><button class="posclear" id="clearPosButton" type="button">入力クリア</button></div>`
     ],
     [
       `.posSubBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}`,
@@ -35,14 +35,6 @@ export async function onRequest(context) {
       `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome+tips,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`
     ],
     [
-      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`,
-      `sales=posSales+received+tips,uberIncome=uber,dailySales=money(r.dailySales),combinedSales=posSales+uberIncome+tips,appProfit=combinedSales-gasCost,expected=start+sales+exchange-gasCost;`
-    ],
-    [
-      `['Uber調整',-c.uberPending,c.uberPending>=0?'受取待ち控除':'支払い予定加算']`,
-      `['Uber受取/支払',c.uberPending,'差異には反映しない']`
-    ],
-    [
       `sales:sales,dailySales:dailySales,appProfit:appProfit,gasCost:gasCost`,
       `sales:sales,dailySales:dailySales,uberIncome:uberIncome,combinedSales:combinedSales,appProfit:appProfit,gasCost:gasCost`
     ],
@@ -55,15 +47,7 @@ export async function onRequest(context) {
       `salesCard('今日の合算売上',d.sales,'POS売上 + Uber + Tip','')+salesCard('今日の利益',d.profit,'合算売上 − ガソリン','profit')+salesCard('今週の合算売上',w.sales,'POS + Uber + Tip','')+salesCard('今週の利益',w.profit,'週合算売上 − 週ガソリン','profit')+salesCard('今月の合算売上',m.sales,'POS + Uber + Tip','month')+salesCard('今月の利益',m.profit,'月合算売上 − 月ガソリン','profit')`
     ],
     [
-      `salesCard('今日の合算売上',d.sales,'POS売上 + Uber受取/支払い','')+salesCard('今日の利益',d.profit,'合算売上 − ガソリン','profit')+salesCard('今週の合算売上',w.sales,'POS + Uberを週集計','')+salesCard('今週の利益',w.profit,'週合算売上 − 週ガソリン','profit')+salesCard('今月の合算売上',m.sales,'POS + Uberを月集計','month')+salesCard('今月の利益',m.profit,'月合算売上 − 月ガソリン','profit')`,
-      `salesCard('今日の合算売上',d.sales,'POS売上 + Uber + Tip','')+salesCard('今日の利益',d.profit,'合算売上 − ガソリン','profit')+salesCard('今週の合算売上',w.sales,'POS + Uber + Tip','')+salesCard('今週の利益',w.profit,'週合算売上 − 週ガソリン','profit')+salesCard('今月の合算売上',m.sales,'POS + Uber + Tip','month')+salesCard('今月の利益',m.profit,'月合算売上 − 月ガソリン','profit')`
-    ],
-    [
       `アプリ売上 '+yen(c.dailySales)+' / ガソリン`,
-      `合算売上 '+yen(c.combinedSales)+' / Uber確認 '+yen(c.dailySales)+' / Tip '+yen(c.tips)+' / ガソリン`
-    ],
-    [
-      `合算売上 '+yen(c.combinedSales)+' / Uber確認 '+yen(c.dailySales)+' / ガソリン`,
       `合算売上 '+yen(c.combinedSales)+' / Uber確認 '+yen(c.dailySales)+' / Tip '+yen(c.tips)+' / ガソリン`
     ],
     [
@@ -72,10 +56,6 @@ export async function onRequest(context) {
     ],
     [
       `青・紫・緑系カードはアプリ売上入力用です。金種管理とは別で集計します。`,
-      `青・紫・緑系カードは売上集計用です。POS売上、Uber受取/支払い予定、Tipを合算して表示します。`
-    ],
-    [
-      `青・紫・緑系カードは売上集計用です。POS売上とUber受取/支払い予定を合算して表示します。`,
       `青・紫・緑系カードは売上集計用です。POS売上、Uber受取/支払い予定、Tipを合算して表示します。`
     ]
   ];
@@ -104,244 +84,77 @@ export async function onRequest(context) {
     {keys:['1円玉','1'], count:15}
   ];
 
-  function amountFromText(text){
-    var n = String(text || '').replace(/[^0-9-]/g,'');
-    return Number(n || 0);
-  }
-  function clickKey(k){
-    var b = document.querySelector('.key[data-key="'+k+'"]');
-    if(b) b.click();
-  }
-  function typeAmount(n){
-    String(Math.max(0, Math.floor(Number(n || 0)))).split('').forEach(function(ch){clickKey(ch);});
-  }
+  function amountFromText(text){ return Number(String(text || '').replace(/[^0-9-]/g,'') || 0); }
+  function clickKey(k){ var b = document.querySelector('.key[data-key="'+k+'"]'); if(b) b.click(); }
+  function typeAmount(n){ String(Math.max(0, Math.floor(Number(n || 0)))).split('').forEach(function(ch){ clickKey(ch); }); }
   function setPaidByKeypad(n){
     var paid = document.querySelector('.modeBtn[data-mode="paid"]');
     if(paid) paid.click();
     clickKey('C');
     typeAmount(n);
   }
-  function applyFractionTip(){
+  function applyManualTip(){
     var sale = amountFromText(document.getElementById('posSaleView') && document.getElementById('posSaleView').textContent);
     var paid = amountFromText(document.getElementById('posPaidView') && document.getElementById('posPaidView').textContent);
     var change = Math.max(0, paid - sale);
-    var fraction = change % 1000;
-    if(!sale || !paid || change <= 0 || fraction <= 0){
-      alert('Tip端数にできるおつりがありません。');
-      return;
-    }
+    if(!sale || !paid || change <= 0){ alert('チップ指定できるおつりがありません。'); return; }
+    var defaultTip = change % 1000 || '';
+    var answer = prompt('何円チップにしますか？\nおつり：' + change.toLocaleString('ja-JP') + '円', defaultTip);
+    if(answer === null) return;
+    var tip = Math.floor(Number(String(answer).replace(/[^0-9]/g,'')) || 0);
+    if(tip <= 0){ alert('1円以上で入力してください。'); return; }
+    if(tip > change){ alert('チップはおつり以下で入力してください。'); return; }
     var tipBtn = document.getElementById('tipChangeButton');
-    if(!tipBtn){
-      alert('Tipボタンが見つかりません。');
-      return;
-    }
-    var temporaryPaid = sale + fraction;
-    setPaidByKeypad(temporaryPaid);
+    if(!tipBtn){ alert('Tipボタンが見つかりません。'); return; }
+    setPaidByKeypad(sale + tip);
     setTimeout(function(){
       tipBtn.click();
-      setTimeout(function(){ setPaidByKeypad(paid); }, 80);
-    }, 80);
+      setTimeout(function(){ setPaidByKeypad(paid); }, 100);
+    }, 100);
   }
-  function ensureTipFractionButton(){
+  function ensureTipAmountButton(){
     var area = document.querySelector('.posSubBtns');
     if(!area) return;
     area.style.gridTemplateColumns = '1fr 1fr 1fr';
-    var tip = document.getElementById('tipChangeButton');
     var clear = document.getElementById('clearPosButton');
-    var btn = document.getElementById('tipFractionButton');
+    var old = document.getElementById('tipFractionButton');
+    if(old){ old.id = 'tipAmountButton'; old.textContent = 'チップ指定'; old.className = 'postip tipamount'; old.dataset.ready = ''; }
+    var btn = document.getElementById('tipAmountButton');
     if(!btn){
       btn = document.createElement('button');
-      btn.id = 'tipFractionButton';
+      btn.id = 'tipAmountButton';
       btn.type = 'button';
-      btn.className = 'postip tipfraction';
-      btn.textContent = 'Tip端数';
+      btn.className = 'postip tipamount';
+      btn.textContent = 'チップ指定';
       if(clear) area.insertBefore(btn, clear); else area.appendChild(btn);
     }
     if(btn.dataset.ready !== '1'){
       btn.dataset.ready = '1';
-      btn.addEventListener('click', applyFractionTip);
+      btn.onclick = applyManualTip;
     }
   }
 
-  function monthKeyFromText(text){
-    var m = String(text||'').match(/(\\d{4})年(\\d{1,2})月/);
-    if(!m) return '';
-    return m[1] + '-' + String(m[2]).padStart(2,'0');
-  }
-  function currentKey(){return currentYear + '-' + String(currentMonth).padStart(2,'0');}
-
+  function monthKeyFromText(text){ var m = String(text||'').match(/(\\d{4})年(\\d{1,2})月/); if(!m) return ''; return m[1] + '-' + String(m[2]).padStart(2,'0'); }
+  function currentKey(){ return currentYear + '-' + String(currentMonth).padStart(2,'0'); }
   function startView(){
     var exact = document.getElementById('view-start') || document.getElementById('view-startCash') || document.getElementById('view-start-cash');
     if(exact) return exact;
-    var views = Array.from(document.querySelectorAll('.view, section, .panel'));
-    return views.find(function(el){
-      return el.textContent && el.textContent.includes('開始時') && el.querySelector('.mrow');
-    }) || null;
+    return Array.from(document.querySelectorAll('.view, section, .panel')).find(function(el){ return el.textContent && el.textContent.includes('開始時') && el.querySelector('.mrow'); }) || null;
   }
-  function setInputValue(input, value){
-    if(!input) return;
-    input.value = String(value);
-    input.dispatchEvent(new Event('input', {bubbles:true}));
-    input.dispatchEvent(new Event('change', {bubbles:true}));
-  }
-  function defaultForRow(row){
-    var text = row.textContent || '';
-    for(var i=0;i<START_DEFAULTS.length;i++){
-      var d = START_DEFAULTS[i];
-      if(d.keys.some(function(k){return text.includes(k);})) return d.count;
-    }
-    return null;
-  }
-  function startRows(){
-    var view = startView();
-    if(!view) return [];
-    return Array.from(view.querySelectorAll('.mrow')).map(function(row){
-      return {row:row, input:row.querySelector('input.cinput, .cinput')};
-    }).filter(function(x){return x.input && defaultForRow(x.row) !== null;});
-  }
-  function applyStartDefaults(){
-    var rows = startRows();
-    if(!rows.length) return false;
-    rows.forEach(function(x){
-      var v = defaultForRow(x.row);
-      setInputValue(x.input, v);
-    });
-    return true;
-  }
-  function ensureDefaultButton(){
-    var view = startView();
-    if(!view || document.getElementById('start-default-cash-button')) return;
-    var btn = document.createElement('button');
-    btn.id = 'start-default-cash-button';
-    btn.type = 'button';
-    btn.className = 'btn lightbtn';
-    btn.textContent = 'デフォルト値を反映';
-    btn.style.margin = '0 0 12px 0';
-    btn.style.width = '100%';
-    btn.addEventListener('click', function(){ applyStartDefaults(); });
-    var h = Array.from(view.querySelectorAll('h2,.head')).find(function(el){return el.textContent && el.textContent.includes('開始時');});
-    if(h && h.parentElement){
-      h.insertAdjacentElement('afterend', btn);
-    }else{
-      var firstMoney = view.querySelector('.money') || view.querySelector('.mrow');
-      if(firstMoney) firstMoney.insertAdjacentElement('beforebegin', btn);
-      else view.prepend(btn);
-    }
-  }
-
-  function ensurePastBox(targetId, title){
-    var target = document.getElementById(targetId);
-    if(!target) return null;
-    var boxId = targetId + '-past-months';
-    var old = document.getElementById(boxId);
-    if(old) old.remove();
-    var box = document.createElement('div');
-    box.id = boxId;
-    box.className = 'panel';
-    box.style.marginTop = '12px';
-    box.innerHTML = '<div class="head"><div><h2>'+title+'</h2><div class="help">前月以前はここを開くと確認できます。</div></div></div><div class="list" data-past-list="1"></div>';
-    target.parentElement.appendChild(box);
-    return box.querySelector('[data-past-list]');
-  }
-  function filterMonthList(targetId, pastTitle){
-    var list = document.getElementById(targetId);
-    if(!list || list.dataset.monthFiltered === 'busy') return;
-    var items = Array.from(list.children).filter(function(el){return el.classList && el.classList.contains('item');});
-    if(!items.length) return;
-    list.dataset.monthFiltered = 'busy';
-    var ck = currentKey();
-    var past = {};
-    items.forEach(function(item){
-      var key = monthKeyFromText(item.textContent);
-      if(key && key !== ck){
-        var label = key.replace('-', '年') + '月';
-        if(!past[label]) past[label] = [];
-        past[label].push(item.cloneNode(true));
-        item.remove();
-      }
-    });
-    if(!list.children.length){
-      var empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = currentMonth + '月のデータはまだありません。前月以前は下の詳細から確認できます。';
-      list.appendChild(empty);
-    }
-    var labels = Object.keys(past).sort().reverse();
-    if(labels.length){
-      var pastList = ensurePastBox(targetId, pastTitle);
-      labels.forEach(function(label){
-        var details = document.createElement('details');
-        details.className = 'item';
-        details.style.display = 'block';
-        var summary = document.createElement('summary');
-        summary.className = 'date';
-        summary.style.cursor = 'pointer';
-        summary.textContent = label + 'の詳細（' + past[label].length + '件）';
-        var inner = document.createElement('div');
-        inner.className = 'list';
-        inner.style.marginTop = '10px';
-        past[label].forEach(function(node){inner.appendChild(node);});
-        details.appendChild(summary);
-        details.appendChild(inner);
-        pastList.appendChild(details);
-      });
-    }
-    setTimeout(function(){delete list.dataset.monthFiltered;}, 50);
-  }
-  function labelCurrentMonthCards(){
-    document.querySelectorAll('.salesCard .label').forEach(function(el){
-      if(el.textContent.includes('今月') && !el.textContent.includes('（'+currentMonth+'月）')){
-        el.textContent = el.textContent.replace('今月', '今月（'+currentMonth+'月）');
-      }
-    });
-  }
-  function addSalesNote(){
-    var panel = document.querySelector('#view-sales .salesPanel');
-    if(!panel || document.getElementById('uber-sales-note')) return;
-    var note = document.createElement('div');
-    note.id = 'uber-sales-note';
-    note.className = 'notice';
-    note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定 + Tipで計算します。<br><b>利益：</b> 合算売上からガソリン代を引いて計算します。過去分のPOS明細に入っているTipも反映されます。<br><b>差異：</b> Uber受取待ち/支払い予定は、手元の現金ではないため最終差異には反映しません。<br><b>マイナス入力：</b> 支払い予定は -537 のように半角マイナスを付けて入力してください。';
-    panel.appendChild(note);
-  }
-  function fixUberMinusInput(){
-    var input = document.getElementById('uberPending');
-    if(!input || input.dataset.minusReady === '1') return;
-    input.dataset.minusReady = '1';
-    input.setAttribute('type','text');
-    input.setAttribute('inputmode','text');
-    input.setAttribute('pattern','-?[0-9]*');
-    input.setAttribute('placeholder','受取待ち: 3000 / 支払い: -1000');
-    input.addEventListener('input', function(){
-      var v = input.value.replace(/[−－ー―]/g, '-').replace(/[^0-9-]/g, '');
-      if(v.indexOf('-') > 0) v = v.replace(/-/g, '');
-      if(v.length > 1) v = v.charAt(0) + v.slice(1).replace(/-/g, '');
-      if(input.value !== v){
-        input.value = v;
-        input.dispatchEvent(new Event('input', {bubbles:true}));
-      }
-    });
-  }
-  function run(){
-    ensureTipFractionButton();
-    ensureDefaultButton();
-    filterMonthList('historyList', '前月以前の履歴');
-    filterMonthList('salesHistoryList', '前月以前の売上詳細');
-    labelCurrentMonthCards();
-    addSalesNote();
-    fixUberMinusInput();
-  }
+  function setInputValue(input, value){ if(!input) return; input.value = String(value); input.dispatchEvent(new Event('input', {bubbles:true})); input.dispatchEvent(new Event('change', {bubbles:true})); }
+  function defaultForRow(row){ var text = row.textContent || ''; for(var i=0;i<START_DEFAULTS.length;i++){ var d = START_DEFAULTS[i]; if(d.keys.some(function(k){return text.includes(k);})) return d.count; } return null; }
+  function startRows(){ var view = startView(); if(!view) return []; return Array.from(view.querySelectorAll('.mrow')).map(function(row){ return {row:row, input:row.querySelector('input.cinput, .cinput')}; }).filter(function(x){ return x.input && defaultForRow(x.row) !== null; }); }
+  function applyStartDefaults(){ var rows = startRows(); if(!rows.length) return false; rows.forEach(function(x){ setInputValue(x.input, defaultForRow(x.row)); }); return true; }
+  function ensureDefaultButton(){ var view = startView(); if(!view || document.getElementById('start-default-cash-button')) return; var btn = document.createElement('button'); btn.id = 'start-default-cash-button'; btn.type = 'button'; btn.className = 'btn lightbtn'; btn.textContent = 'デフォルト値を反映'; btn.style.margin = '0 0 12px 0'; btn.style.width = '100%'; btn.addEventListener('click', applyStartDefaults); var first = view.querySelector('.money') || view.querySelector('.mrow'); if(first) first.insertAdjacentElement('beforebegin', btn); else view.prepend(btn); }
+  function ensurePastBox(targetId, title){ var target = document.getElementById(targetId); if(!target) return null; var boxId = targetId + '-past-months'; var old = document.getElementById(boxId); if(old) old.remove(); var box = document.createElement('div'); box.id = boxId; box.className = 'panel'; box.style.marginTop = '12px'; box.innerHTML = '<div class="head"><div><h2>'+title+'</h2><div class="help">前月以前はここを開くと確認できます。</div></div></div><div class="list" data-past-list="1"></div>'; target.parentElement.appendChild(box); return box.querySelector('[data-past-list]'); }
+  function filterMonthList(targetId, pastTitle){ var list = document.getElementById(targetId); if(!list || list.dataset.monthFiltered === 'busy') return; var items = Array.from(list.children).filter(function(el){ return el.classList && el.classList.contains('item'); }); if(!items.length) return; list.dataset.monthFiltered = 'busy'; var ck = currentKey(); var past = {}; items.forEach(function(item){ var key = monthKeyFromText(item.textContent); if(key && key !== ck){ var label = key.replace('-', '年') + '月'; if(!past[label]) past[label] = []; past[label].push(item.cloneNode(true)); item.remove(); } }); if(!list.children.length){ var empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = currentMonth + '月のデータはまだありません。前月以前は下の詳細から確認できます。'; list.appendChild(empty); } var labels = Object.keys(past).sort().reverse(); if(labels.length){ var pastList = ensurePastBox(targetId, pastTitle); labels.forEach(function(label){ var details = document.createElement('details'); details.className = 'item'; details.style.display = 'block'; var summary = document.createElement('summary'); summary.className = 'date'; summary.style.cursor = 'pointer'; summary.textContent = label + 'の詳細（' + past[label].length + '件）'; var inner = document.createElement('div'); inner.className = 'list'; inner.style.marginTop = '10px'; past[label].forEach(function(node){inner.appendChild(node);}); details.appendChild(summary); details.appendChild(inner); pastList.appendChild(details); }); } setTimeout(function(){ delete list.dataset.monthFiltered; }, 50); }
+  function labelCurrentMonthCards(){ document.querySelectorAll('.salesCard .label').forEach(function(el){ if(el.textContent.includes('今月') && !el.textContent.includes('（'+currentMonth+'月）')) el.textContent = el.textContent.replace('今月', '今月（'+currentMonth+'月）'); }); }
+  function addSalesNote(){ var panel = document.querySelector('#view-sales .salesPanel'); if(!panel || document.getElementById('uber-sales-note')) return; var note = document.createElement('div'); note.id = 'uber-sales-note'; note.className = 'notice'; note.innerHTML = '<b>合算売上：</b> POS売上（登録分） + Uber受取待ち/支払い予定 + Tipで計算します。<br><b>利益：</b> 合算売上からガソリン代を引いて計算します。過去分のPOS明細に入っているTipも反映されます。<br><b>差異：</b> Uber受取待ち/支払い予定は、手元の現金ではないため最終差異には反映しません。<br><b>チップ指定：</b> おつりの中から任意の金額をチップにできます。'; panel.appendChild(note); }
+  function fixUberMinusInput(){ var input = document.getElementById('uberPending'); if(!input || input.dataset.minusReady === '1') return; input.dataset.minusReady = '1'; input.setAttribute('type','text'); input.setAttribute('inputmode','text'); input.setAttribute('pattern','-?[0-9]*'); input.setAttribute('placeholder','受取待ち: 3000 / 支払い: -1000'); }
+  function run(){ ensureTipAmountButton(); ensureDefaultButton(); filterMonthList('historyList', '前月以前の履歴'); filterMonthList('salesHistoryList', '前月以前の売上詳細'); labelCurrentMonthCards(); addSalesNote(); fixUberMinusInput(); }
   var timer = null;
-  var observer = new MutationObserver(function(){
-    clearTimeout(timer);
-    timer = setTimeout(run, 120);
-  });
-  window.addEventListener('DOMContentLoaded', function(){
-    run();
-    if(document.body) observer.observe(document.body, {childList:true, subtree:true});
-    setTimeout(run, 400);
-    setTimeout(run, 1200);
-  });
+  var observer = new MutationObserver(function(){ clearTimeout(timer); timer = setTimeout(run, 120); });
+  window.addEventListener('DOMContentLoaded', function(){ run(); if(document.body) observer.observe(document.body, {childList:true, subtree:true}); setTimeout(run, 400); setTimeout(run, 1200); });
 })();
 </script>
 `;

@@ -10,10 +10,6 @@ export async function onRequest(context) {
     `<div class="posSubBtns"><button class="postip" id="tipChangeButton" type="button">Tip</button><button class="postip" id="tipAmountButton" type="button">チップ指定</button><button class="posclear" id="clearPosButton" type="button">入力クリア</button></div>`
   );
   html = html.replace(`.posSubBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}`, `.posSubBtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}`);
-  html = html.replace(
-    `<div><label>Uber受取待ち / 支払い予定</label><input id="uberPending" type="number" inputmode="numeric" placeholder="受取待ち: 3000 / 支払い: -1000"></div>`,
-    ``
-  );
   html = html.replace(`青・紫・緑系カードはアプリ売上入力用です。金種管理とは別で集計します。`, `売上 = アプリ売上 + Tip / 利益 = 売上 − ガソリン代で計算します。`);
 
   const inject = `
@@ -25,6 +21,7 @@ export async function onRequest(context) {
   var DRAFTKEY = 'cash_balance_app_draft_v21';
   var API = '/api/records';
   var DENOMS = [10000,5000,2000,1000,500,100,50,10,5,1];
+  var START_DEFAULTS = {10000:0,5000:1,2000:0,1000:10,500:8,100:15,50:10,10:15,5:10,1:15};
 
   function yen(n){
     n = Math.round(Number(n || 0));
@@ -42,7 +39,7 @@ export async function onRequest(context) {
     var p = String(s || today()).split('-').map(Number);
     return new Date(p[0] || new Date().getFullYear(), (p[1] || 1)-1, p[2] || 1);
   }
-  function sameDay(a,b){ return String(a) === String(b); }
+  function sameDay(a,b){ return String(a || '') === String(b || ''); }
   function sameMonth(a,b){
     var da = parseDate(a), db = parseDate(b);
     return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth();
@@ -77,6 +74,7 @@ export async function onRequest(context) {
     if(dailySales) s.dailySales = money(dailySales.value);
     if(salesMemo) s.salesMemo = salesMemo.value || '';
     s.uberPending = 0;
+    if(!s.counts) s.counts = {};
     return s;
   }
   function totalCounts(r, sec){
@@ -88,8 +86,6 @@ export async function onRequest(context) {
     var posItems = Array.isArray(r.posItems) ? r.posItems : [];
     var gasItems = Array.isArray(r.gasItems) ? r.gasItems : [];
     var posSales = posItems.reduce(function(s,x){ return s + money(x.sale); }, 0);
-    var posPaid = posItems.reduce(function(s,x){ return s + money(x.paid); }, 0);
-    var posChange = posItems.reduce(function(s,x){ return s + money(x.change); }, 0);
     var posTips = posItems.reduce(function(s,x){ return s + money(x.tip); }, 0);
     var coinTips = totalCounts(r, 'tips');
     var tips = posTips + coinTips;
@@ -103,11 +99,10 @@ export async function onRequest(context) {
     var exchange = totalCounts(r,'exchange');
     var end = totalCounts(r,'end');
     var expected = start + posSales + received + tips + exchange - gas;
-    return {appSales:appSales,tips:tips,posSales:posSales,posPaid:posPaid,posChange:posChange,gas:gas,sales:sales,profit:profit,cashIn:cashIn,diff:end-expected};
+    return {appSales:appSales,tips:tips,posSales:posSales,gas:gas,sales:sales,profit:profit,cashIn:cashIn,diff:end-expected};
   }
   function mergeCurrent(records){
     var cur = currentStateFromForm();
-    if(!cur) return records || [];
     var out = Array.isArray(records) ? records.slice() : [];
     var idx = out.findIndex(function(r){ return cur.id && r.id === cur.id; });
     if(idx >= 0) out[idx] = cur; else out.push(cur);
@@ -221,7 +216,38 @@ export async function onRequest(context) {
     btn.textContent = 'チップ指定';
     btn.onclick = manualTip;
   }
-  function run(){ ensureTipButton(); renderDashboard(); }
+  function applyStartDefaults(){
+    Object.keys(START_DEFAULTS).forEach(function(den){
+      var input = document.getElementById('start-' + den);
+      if(input){
+        input.value = String(START_DEFAULTS[den]);
+        input.dispatchEvent(new Event('input',{bubbles:true}));
+        input.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+    });
+  }
+  function ensureDefaultButton(){
+    var view = document.getElementById('view-start');
+    if(!view || document.getElementById('start-default-cash-button')) return;
+    var btn = document.createElement('button');
+    btn.id = 'start-default-cash-button';
+    btn.type = 'button';
+    btn.className = 'btn lightbtn';
+    btn.textContent = 'デフォルト値を反映';
+    btn.style.margin = '0 0 12px 0';
+    btn.style.width = '100%';
+    btn.onclick = applyStartDefaults;
+    var first = view.querySelector('.money') || view.querySelector('.mrow');
+    if(first) first.insertAdjacentElement('beforebegin', btn); else view.prepend(btn);
+  }
+  function hideUberField(){
+    var input = document.getElementById('uberPending');
+    if(!input) return;
+    input.value = '0';
+    var wrap = input.closest('div');
+    if(wrap && wrap.querySelector('label')) wrap.style.display = 'none';
+  }
+  function run(){ ensureTipButton(); ensureDefaultButton(); hideUberField(); renderDashboard(); }
   var timer = null;
   var obs = new MutationObserver(function(){ clearTimeout(timer); timer = setTimeout(run, 180); });
   window.addEventListener('DOMContentLoaded', function(){

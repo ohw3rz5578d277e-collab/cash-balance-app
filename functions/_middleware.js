@@ -10,7 +10,7 @@ export async function onRequest(context) {
     `<div class="posSubBtns"><button class="postip" id="tipChangeButton" type="button">Tip</button><button class="postip" id="tipAmountButton" type="button">チップ指定</button><button class="posclear" id="clearPosButton" type="button">入力クリア</button></div>`
   );
   html = html.replace(`.posSubBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}`, `.posSubBtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}`);
-  html = html.replace(`青・紫・緑系カードはアプリ売上入力用です。金種管理とは別で集計します。`, `売上 = アプリ売上 + Tip / 利益 = 売上 − ガソリン代で計算します。`);
+  html = html.replace(`青・紫・緑系カードはアプリ売上入力用です。金種管理とは別で集計します。`, `ホームは当日、売上タブは月トータルで表示します。売上 = アプリ売上 + Tip / 利益 = 売上 − ガソリン代。`);
 
   const inject = `
 <script>
@@ -81,6 +81,16 @@ export async function onRequest(context) {
     var counts = r && r.counts && r.counts[sec] ? r.counts[sec] : {};
     return DENOMS.reduce(function(sum, den){ return sum + money(counts[String(den)]) * den; }, 0);
   }
+  function minutesForRecord(r){
+    var s = r && r.startTime;
+    var e = r && r.endTime;
+    if(!s || !e) return 0;
+    var sp = String(s).split(':').map(Number), ep = String(e).split(':').map(Number);
+    var sm = (sp[0]||0)*60 + (sp[1]||0);
+    var em = (ep[0]||0)*60 + (ep[1]||0);
+    if(em < sm) em += 24*60;
+    return Math.max(0, em-sm);
+  }
   function calc(r){
     r = r || {};
     var posItems = Array.isArray(r.posItems) ? r.posItems : [];
@@ -99,7 +109,7 @@ export async function onRequest(context) {
     var exchange = totalCounts(r,'exchange');
     var end = totalCounts(r,'end');
     var expected = start + posSales + received + tips + exchange - gas;
-    return {appSales:appSales,tips:tips,posSales:posSales,gas:gas,sales:sales,profit:profit,cashIn:cashIn,diff:end-expected};
+    return {appSales:appSales,tips:tips,posSales:posSales,gas:gas,sales:sales,profit:profit,cashIn:cashIn,diff:end-expected,minutes:minutesForRecord(r)};
   }
   function mergeCurrent(records){
     var cur = currentStateFromForm();
@@ -121,7 +131,7 @@ export async function onRequest(context) {
     }
   }
   function period(records, kind, baseDate){
-    var out = {sales:0,profit:0,appSales:0,tips:0,gas:0,cashIn:0,diff:0,count:0};
+    var out = {sales:0,profit:0,appSales:0,tips:0,gas:0,cashIn:0,diff:0,minutes:0,count:0};
     records.forEach(function(r){
       var ok = kind === 'day' ? sameDay(r.date, baseDate) : kind === 'week' ? sameWeek(r.date, baseDate) : sameMonth(r.date, baseDate);
       if(!ok) return;
@@ -133,22 +143,16 @@ export async function onRequest(context) {
       out.gas += c.gas;
       out.cashIn += c.cashIn;
       out.diff += c.diff;
+      out.minutes += c.minutes;
       out.count++;
     });
     return out;
   }
-  function workMinutes(){
-    var s = document.getElementById('startTime') && document.getElementById('startTime').value;
-    var e = document.getElementById('endTime') && document.getElementById('endTime').value;
-    if(!s || !e) return 0;
-    var sp = s.split(':').map(Number), ep = e.split(':').map(Number);
-    var sm = (sp[0]||0)*60 + (sp[1]||0);
-    var em = (ep[0]||0)*60 + (ep[1]||0);
-    if(em < sm) em += 24*60;
-    return Math.max(0, em-sm);
-  }
   function card(label,value,sub,cls){
     return '<div class="salesCard '+(cls||'')+'"><div class="label">'+label+'</div><div class="value '+(value<0?'bad':'')+'">'+yen(value)+'</div><div class="sub">'+sub+'</div></div>';
+  }
+  function wage(profit, minutes){
+    return {hourly: minutes > 0 ? profit / (minutes/60) : 0, minutely: minutes > 0 ? profit / minutes : 0};
   }
   async function renderDashboard(){
     var records = await loadRecords();
@@ -156,24 +160,31 @@ export async function onRequest(context) {
     var d = period(records,'day',base);
     var w = period(records,'week',base);
     var m = period(records,'month',base);
-    var min = workMinutes();
-    var hourly = min > 0 ? d.profit / (min/60) : 0;
-    var minutely = min > 0 ? d.profit / min : 0;
-    var html = '';
-    html += card('今日の売上', d.sales, 'アプリ売上 + Tip', '');
-    html += card('今日の利益', d.profit, '売上 − ガソリン', 'profit');
-    html += card('今週の売上', w.sales, 'アプリ売上 + Tip', '');
-    html += card('今週の利益', w.profit, '週売上 − 週ガソリン', 'profit');
-    html += card('今月の売上', m.sales, 'アプリ売上 + Tip', 'month');
-    html += card('今月の利益', m.profit, '月売上 − 月ガソリン', 'profit');
-    html += card('今月の現金合計', m.cashIn, 'POS現金 + Tip', 'month');
-    html += card('今月の差異合計', m.diff, '終了時 − 理論上', m.diff===0?'profit':'');
-    html += card('時給', hourly, '今日の利益 ÷ 稼働時間', 'profit');
-    html += card('分給', minutely, '稼働時間 '+min+'分', 'profit');
+    var dayWage = wage(d.profit, d.minutes);
+    var monthWage = wage(m.profit, m.minutes);
+
+    var homeHtml = '';
+    homeHtml += card('今日の売上', d.sales, 'アプリ売上 + Tip', '');
+    homeHtml += card('今日の利益', d.profit, '売上 − ガソリン', 'profit');
+    homeHtml += card('今日の現金合計', d.cashIn, 'POS現金 + Tip', '');
+    homeHtml += card('今日の差異', d.diff, '終了時 − 理論上', d.diff===0?'profit':'');
+    homeHtml += card('時給', dayWage.hourly, '当日の利益 ÷ 当日の稼働時間', 'profit');
+    homeHtml += card('分給', dayWage.minutely, '当日の稼働時間 '+d.minutes+'分', 'profit');
+
+    var salesHtml = '';
+    salesHtml += card('今月の売上', m.sales, '月トータル：アプリ売上 + Tip', 'month');
+    salesHtml += card('今月の利益', m.profit, '月トータル：売上 − ガソリン', 'profit');
+    salesHtml += card('今月の現金合計', m.cashIn, '月トータル：POS現金 + Tip', 'month');
+    salesHtml += card('今月の差異合計', m.diff, '月トータル：終了時 − 理論上', m.diff===0?'profit':'');
+    salesHtml += card('月トータル時給', monthWage.hourly, '今月の利益 ÷ 今月の稼働時間', 'profit');
+    salesHtml += card('月トータル分給', monthWage.minutely, '今月の稼働時間 '+m.minutes+'分 / '+m.count+'件', 'profit');
+    salesHtml += card('今週の売上', w.sales, '参考：週トータル', '');
+    salesHtml += card('今週の利益', w.profit, '参考：週トータル', 'profit');
+
     var a = document.getElementById('salesDashboard');
     var b = document.getElementById('salesPeriodCards');
-    if(a) a.innerHTML = html;
-    if(b) b.innerHTML = html;
+    if(a) a.innerHTML = homeHtml;
+    if(b) b.innerHTML = salesHtml;
     var preview = document.getElementById('dailySalesPreview');
     if(preview) preview.textContent = yen(money(document.getElementById('dailySales') && document.getElementById('dailySales').value));
   }

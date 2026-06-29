@@ -30,10 +30,11 @@ function parsePayload(row){
   try { return JSON.parse(row.payload || '{}') || {}; } catch (_) { return {}; }
 }
 function calcRecord(payload){
-  const dailySales = money(payload.dailySales ?? payload.sales ?? payload.売上 ?? 0);
+  const dailySales = money(payload.dailySales ?? payload.sales ?? payload.appSales ?? payload.売上 ?? 0);
   const gasItems = Array.isArray(payload.gasItems) ? payload.gasItems : [];
   const gas = gasItems.reduce((s,x)=>s + money(x && x.cost), 0);
-  const profit = dailySales - gas;
+  const explicit = money(payload.appProfit ?? payload.profit ?? payload.monthProfit ?? payload.利益 ?? 0);
+  const profit = explicit || (dailySales - gas);
   return { dailySales, gas, profit };
 }
 
@@ -58,21 +59,34 @@ export async function onRequest(context){
        LIMIT 1000`
     ).bind(month + '%').all();
 
-    const dailyMap = {};
+    const latestByDate = {};
     for(const row of (result.results || [])){
+      const key = row.work_date;
+      const prev = latestByDate[key];
+      if(!prev || String(row.updated_at || '').localeCompare(String(prev.updated_at || '')) >= 0){
+        latestByDate[key] = row;
+      }
+    }
+
+    const dailyMap = {};
+    for(const row of Object.values(latestByDate)){
       const payload = parsePayload(row);
       const c = calcRecord(payload);
-      if(!dailyMap[row.work_date]) dailyMap[row.work_date] = { date: row.work_date, sales:0, gas:0, profit:0, count:0 };
-      dailyMap[row.work_date].sales += c.dailySales;
-      dailyMap[row.work_date].gas += c.gas;
-      dailyMap[row.work_date].profit += c.profit;
-      dailyMap[row.work_date].count += 1;
+      dailyMap[row.work_date] = {
+        date: row.work_date,
+        sales: c.dailySales,
+        gas: c.gas,
+        profit: c.profit,
+        count: 1,
+        id: row.id,
+        updatedAt: row.updated_at
+      };
     }
 
     const daily = Object.values(dailyMap).sort((a,b)=>a.date.localeCompare(b.date));
     const monthSales = daily.reduce((s,x)=>s+x.sales,0);
     const monthGas = daily.reduce((s,x)=>s+x.gas,0);
-    const monthProfit = monthSales - monthGas;
+    const monthProfit = daily.reduce((s,x)=>s+x.profit,0);
     const todayRow = dailyMap[today] || { date: today, sales:0, gas:0, profit:0, count:0 };
     const latest = daily.length ? daily[daily.length - 1] : null;
 
@@ -87,7 +101,8 @@ export async function onRequest(context){
       gas: monthGas,
       todaySales: todayRow.sales,
       todayGas: todayRow.gas,
-      count: (result.results || []).length,
+      sourceRows: (result.results || []).length,
+      count: daily.length,
       daily,
       latest
     });

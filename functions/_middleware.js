@@ -32,7 +32,7 @@ async function manualTip(){
  var paid=amountText(document.getElementById('posPaidView')&&document.getElementById('posPaidView').textContent);
  var change=Math.max(0,paid-sale);
  if(!sale||!paid||change<=0){alert('チップ指定できるおつりがありません。');return}
- var input=prompt('何円チップにしますか？\n現在のおつり：'+change.toLocaleString('ja-JP')+'円',change%1000||'');
+ var input=prompt('何円チップにしますか？'+String.fromCharCode(10)+'現在のおつり：'+change.toLocaleString('ja-JP')+'円',change%1000||'');
  if(input===null)return;
  var tip=Math.floor(Number(String(input).replace(/[^0-9]/g,''))||0);
  if(tip<=0){alert('1円以上で入力してください。');return}

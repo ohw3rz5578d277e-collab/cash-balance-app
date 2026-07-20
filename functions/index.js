@@ -26,13 +26,31 @@ export async function onRequest(context) {
     s.setHours(0,0,0,0);e.setHours(23,59,59,999);
     return d>=s&&d<=e;
   }
+  function countSection(record,section){
+    var counts=record&&record.counts&&record.counts[section]?record.counts[section]:{};
+    return DENOMS.reduce(function(total,d){return total+money(counts[String(d)])*d},0);
+  }
   function countTips(record){
     var total=0;
     var items=Array.isArray(record&&record.posItems)?record.posItems:[];
     items.forEach(function(x){total+=money(x&&x.tip)});
-    var counts=record&&record.counts&&record.counts.tips?record.counts.tips:{};
-    DENOMS.forEach(function(d){total+=money(counts[String(d)])*d});
-    return total;
+    return total+countSection(record,'tips');
+  }
+  function cashDifference(record){
+    var end=countSection(record,'end');
+    var hasEnd=end>0||!!(record&&record.endTime);
+    if(!hasEnd)return null;
+    var start=countSection(record,'start');
+    var received=countSection(record,'received');
+    var exchange=countSection(record,'exchange');
+    var tips=countTips(record);
+    var posItems=Array.isArray(record&&record.posItems)?record.posItems:[];
+    var gasItems=Array.isArray(record&&record.gasItems)?record.gasItems:[];
+    var posSales=posItems.reduce(function(total,x){return total+money(x&&x.sale)},0);
+    var gas=gasItems.reduce(function(total,x){return total+money(x&&x.cost)},0);
+    var bank=money(record&&record.uberPending);
+    var expected=start+posSales+received+tips+exchange-gas-bank;
+    return end-expected;
   }
   function draftState(){
     try{
@@ -56,29 +74,55 @@ export async function onRequest(context) {
     }catch(e){return current?[current]:[]}
   }
   function yen(n){return '¥'+Math.round(Number(n||0)).toLocaleString('ja-JP')}
-  async function renderTipTotal(){
+  function ensureCard(cards,id,label,value,sub){
+    var card=document.getElementById(id);
+    if(!card){
+      card=document.createElement('div');
+      card.id=id;
+      card.className='salesCard';
+      cards.appendChild(card);
+    }
+    card.innerHTML='<div class="label">'+label+'</div><div class="value '+(Number(value)<0?'bad':'')+'">'+yen(value)+'</div><div class="sub">'+sub+'</div>';
+  }
+  function ensureTextCard(cards,id,label,value,sub){
+    var card=document.getElementById(id);
+    if(!card){
+      card=document.createElement('div');
+      card.id=id;
+      card.className='salesCard';
+      cards.appendChild(card);
+    }
+    card.innerHTML='<div class="label">'+label+'</div><div class="value">'+value+'</div><div class="sub">'+sub+'</div>';
+  }
+  async function renderExtraTotals(){
     var cards=document.getElementById('analysisCards');
     var start=document.getElementById('analysisStart');
     var end=document.getElementById('analysisEnd');
     if(!cards||!start||!end||!start.value||!end.value)return;
     var rows=await loadRecords();
-    var total=0;
-    rows.forEach(function(r){if(inRange(r.date,start.value,end.value))total+=countTips(r)});
-    var card=document.getElementById('analysisTipTotalCard');
-    if(!card){
-      card=document.createElement('div');
-      card.id='analysisTipTotalCard';
-      card.className='salesCard';
-      cards.appendChild(card);
-    }
-    card.innerHTML='<div class="label">チップ合計</div><div class="value">'+yen(total)+'</div><div class="sub">選択期間のチップ</div>';
+    var tips=0,diff=0,positive=0,negative=0,diffDays=0,closedDays=0;
+    rows.forEach(function(r){
+      if(!inRange(r.date,start.value,end.value))return;
+      tips+=countTips(r);
+      var d=cashDifference(r);
+      if(d===null)return;
+      closedDays++;
+      diff+=d;
+      if(d>0){positive+=d;diffDays++}
+      if(d<0){negative+=d;diffDays++}
+    });
+    ensureCard(cards,'analysisTipTotalCard','チップ合計',tips,'選択期間のチップ');
+    ensureCard(cards,'analysisDiffTotalCard','差異合計',diff,'終了時入力済みの合計');
+    ensureCard(cards,'analysisPositiveDiffCard','プラス差異',positive,'理論値より多かった現金');
+    ensureCard(cards,'analysisNegativeDiffCard','マイナス差異',negative,'理論値より少なかった現金');
+    ensureTextCard(cards,'analysisDiffDaysCard','差異発生日数',diffDays+'日 / '+closedDays+'日','終了時入力済み');
   }
   var timer=null;
-  function schedule(){clearTimeout(timer);timer=setTimeout(renderTipTotal,180)}
+  function schedule(){clearTimeout(timer);timer=setTimeout(renderExtraTotals,180)}
   new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
   document.addEventListener('change',schedule,true);
   document.addEventListener('click',schedule,true);
-  window.addEventListener('DOMContentLoaded',function(){schedule();setTimeout(renderTipTotal,700);setTimeout(renderTipTotal,1600)});
+  window.addEventListener('DOMContentLoaded',function(){schedule();setTimeout(renderExtraTotals,700);setTimeout(renderExtraTotals,1600)});
 })();
 </script>`;
   html = html.replace('</body>', patch + '</body>');

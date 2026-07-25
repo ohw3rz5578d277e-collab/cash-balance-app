@@ -12,6 +12,7 @@ export async function onRequest(context) {
   var DRAFTKEY='cash_balance_app_draft_v21';
   var API='/api/records';
   var DENOMS=[10000,5000,2000,1000,500,100,50,10,5,1];
+  var LATESTKEY='cash_balance_app_latest_open_v1';
 
   function money(v){
     var n=Math.floor(Number(v||0));
@@ -52,11 +53,13 @@ export async function onRequest(context) {
     var expected=start+posSales+received+tips+exchange-gas-bank;
     return end-expected;
   }
+  function draftBox(){
+    try{return JSON.parse(localStorage.getItem(DRAFTKEY)||'{}')||{}}
+    catch(e){return{}}
+  }
   function draftState(){
-    try{
-      var box=JSON.parse(localStorage.getItem(DRAFTKEY)||'{}');
-      return box&&box.state?box.state:null;
-    }catch(e){return null}
+    var box=draftBox();
+    return box&&box.state?box.state:null;
   }
   async function loadRecords(){
     var pin=localStorage.getItem(PINKEY)||'';
@@ -117,12 +120,88 @@ export async function onRequest(context) {
     ensureCard(cards,'analysisNegativeDiffCard','マイナス差異',negative,'理論値より少なかった現金');
     ensureTextCard(cards,'analysisDiffDaysCard','差異発生日数',diffDays+'日 / '+closedDays+'日','終了時入力済み');
   }
+  function formatDate(date){
+    var p=String(date||'').slice(0,10).split('-');
+    return p.length===3?p[0]+'/'+p[1]+'/'+p[2]:String(date||'');
+  }
+  function renderPosDateTimes(){
+    var host=document.getElementById('posList');
+    if(!host)return;
+    var dateInput=document.getElementById('workDate');
+    var state=draftState();
+    var date=(dateInput&&dateInput.value)||(state&&state.date)||'';
+    if(!date)return;
+    Array.prototype.forEach.call(host.children,function(item){
+      if(!item||!item.querySelector)return;
+      var text=String(item.textContent||'');
+      var match=text.match(/(?:^|\s)([01]?\d|2[0-3]):[0-5]\d(?:\s|$)/);
+      var time=match?match[0].trim():'';
+      var label='入力日時：'+formatDate(date)+(time?' '+time:'');
+      var badge=item.querySelector('.cb-pos-datetime');
+      if(!badge){
+        badge=document.createElement('span');
+        badge.className='badge ok cb-pos-datetime';
+        var row=item.querySelector('.row2')||item.querySelector('.itemMain')||item;
+        row.appendChild(badge);
+      }
+      if(badge.textContent!==label)badge.textContent=label;
+    });
+  }
+  function newestRecord(rows){
+    return rows.filter(function(r){return r&&r.date}).sort(function(a,b){
+      var dateCompare=String(b.date||'').slice(0,10).localeCompare(String(a.date||'').slice(0,10));
+      if(dateCompare)return dateCompare;
+      return String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''));
+    })[0]||null;
+  }
+  var latestBusy=false;
+  async function openLatestRecord(){
+    var pin=localStorage.getItem(PINKEY)||'';
+    var main=document.getElementById('mainArea');
+    if(!pin||!main||main.classList.contains('hidden')||latestBusy)return false;
+    latestBusy=true;
+    try{
+      var rows=await loadRecords();
+      var latest=newestRecord(rows);
+      if(!latest)return true;
+      var token=String(latest.id||'')+'|'+String(latest.date||'')+'|'+String(latest.updatedAt||latest.createdAt||'');
+      var current=draftState();
+      var same=current&&String(current.id||'')===String(latest.id||'')&&String(current.date||'').slice(0,10)===String(latest.date||'').slice(0,10);
+      sessionStorage.setItem(LATESTKEY,token);
+      if(!same){
+        var box=draftBox();
+        box.state=latest;
+        box.updatedAt=new Date().toISOString();
+        localStorage.setItem(DRAFTKEY,JSON.stringify(box));
+        location.reload();
+      }
+      return true;
+    }catch(e){return false}
+    finally{latestBusy=false}
+  }
   var timer=null;
-  function schedule(){clearTimeout(timer);timer=setTimeout(renderExtraTotals,180)}
+  function schedule(){
+    clearTimeout(timer);
+    timer=setTimeout(function(){renderExtraTotals();renderPosDateTimes()},180);
+  }
   new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
   document.addEventListener('change',schedule,true);
-  document.addEventListener('click',schedule,true);
-  window.addEventListener('DOMContentLoaded',function(){schedule();setTimeout(renderExtraTotals,700);setTimeout(renderExtraTotals,1600)});
+  document.addEventListener('click',function(e){
+    schedule();
+    if(e.target&&e.target.id==='loginButton')setTimeout(openLatestRecord,500);
+  },true);
+  window.addEventListener('DOMContentLoaded',function(){
+    schedule();
+    var attempts=0;
+    var startup=setInterval(function(){
+      attempts++;
+      openLatestRecord().then(function(done){if(done||attempts>=12)clearInterval(startup)});
+    },500);
+    setTimeout(renderExtraTotals,700);
+    setTimeout(renderPosDateTimes,700);
+    setTimeout(renderExtraTotals,1600);
+    setTimeout(renderPosDateTimes,1600);
+  });
 })();
 </script>`;
   html = html.replace('</body>', patch + '</body>');

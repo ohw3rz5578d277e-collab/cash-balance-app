@@ -97,13 +97,46 @@ export async function onRequest(context) {
     }
     card.innerHTML='<div class="label">'+label+'</div><div class="value">'+value+'</div><div class="sub">'+sub+'</div>';
   }
+  function formatDate(date){
+    var p=String(date||'').slice(0,10).split('-');
+    return p.length===3?p[0]+'/'+p[1]+'/'+p[2]:String(date||'');
+  }
+  function renderDifferenceComment(items){
+    var memo=document.getElementById('analysisMemo');
+    if(!memo)return;
+    var old=document.getElementById('analysisDifferenceComment');
+    if(!items.length){
+      if(old)old.remove();
+      return;
+    }
+    if(!old){
+      old=document.createElement('div');
+      old.id='analysisDifferenceComment';
+      old.style.cssText='margin-top:12px;padding-top:12px;border-top:1px solid #dbe3ec';
+      memo.appendChild(old);
+    }
+    var positive=items.filter(function(x){return x.diff>0});
+    var negative=items.filter(function(x){return x.diff<0});
+    var html='<b>差異が出た場合の確認コメント</b>';
+    html+='<div style="margin-top:8px;font-size:12px;color:#667085">差異が発生した日：'+items.map(function(x){return formatDate(x.date)+'（'+(x.diff>0?'+':'')+yen(x.diff)+'）'}).join('、')+'</div>';
+    html+='<ul style="margin:9px 0 0;padding-left:20px">';
+    if(positive.length){
+      html+='<li><b>プラス差異の主な原因候補：</b>現金売上やチップの入力漏れ、受取金・両替の入力漏れ、お釣りを少なく渡した、終了時の紙幣・硬貨を多く数えた可能性があります。</li>';
+    }
+    if(negative.length){
+      html+='<li><b>マイナス差異の主な原因候補：</b>お釣りの渡し過ぎ、売上の重複・過大入力、ガソリン代や銀行入金の入力漏れ、未記録の現金取り出し、終了時の紙幣・硬貨を少なく数えた可能性があります。</li>';
+    }
+    html+='<li><b>確認順：</b>POS明細の日付と金額 → お釣り → ガソリン・銀行入金 → 開始時と終了時の金種枚数、の順に確認してください。</li>';
+    html+='</ul>';
+    old.innerHTML=html;
+  }
   async function renderExtraTotals(){
     var cards=document.getElementById('analysisCards');
     var start=document.getElementById('analysisStart');
     var end=document.getElementById('analysisEnd');
     if(!cards||!start||!end||!start.value||!end.value)return;
     var rows=await loadRecords();
-    var tips=0,diff=0,positive=0,negative=0,diffDays=0,closedDays=0;
+    var tips=0,diff=0,positive=0,negative=0,diffDays=0,closedDays=0,diffItems=[];
     rows.forEach(function(r){
       if(!inRange(r.date,start.value,end.value))return;
       tips+=countTips(r);
@@ -111,18 +144,16 @@ export async function onRequest(context) {
       if(d===null)return;
       closedDays++;
       diff+=d;
-      if(d>0){positive+=d;diffDays++}
-      if(d<0){negative+=d;diffDays++}
+      if(d>0){positive+=d;diffDays++;diffItems.push({date:r.date,diff:d})}
+      if(d<0){negative+=d;diffDays++;diffItems.push({date:r.date,diff:d})}
     });
+    diffItems.sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''))});
     ensureCard(cards,'analysisTipTotalCard','チップ合計',tips,'選択期間のチップ');
     ensureCard(cards,'analysisDiffTotalCard','差異合計',diff,'終了時入力済みの合計');
     ensureCard(cards,'analysisPositiveDiffCard','プラス差異',positive,'理論値より多かった現金');
     ensureCard(cards,'analysisNegativeDiffCard','マイナス差異',negative,'理論値より少なかった現金');
     ensureTextCard(cards,'analysisDiffDaysCard','差異発生日数',diffDays+'日 / '+closedDays+'日','終了時入力済み');
-  }
-  function formatDate(date){
-    var p=String(date||'').slice(0,10).split('-');
-    return p.length===3?p[0]+'/'+p[1]+'/'+p[2]:String(date||'');
+    renderDifferenceComment(diffItems);
   }
   function renderPosDateTimes(){
     var host=document.getElementById('posList');

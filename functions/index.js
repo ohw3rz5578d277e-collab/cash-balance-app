@@ -12,227 +12,120 @@ export async function onRequest(context) {
   var DRAFTKEY='cash_balance_app_draft_v21';
   var API='/api/records';
   var DENOMS=[10000,5000,2000,1000,500,100,50,10,5,1];
-  var LATESTKEY='cash_balance_app_latest_open_v1';
+  var startupDone=false,startupBusy=false,analysisBusy=false,analysisCache=null;
 
-  function money(v){
-    var n=Math.floor(Number(v||0));
-    return Number.isFinite(n)&&n>0?n:0;
-  }
-  function parseDate(s){
-    var p=String(s||'').slice(0,10).split('-').map(Number);
-    return new Date(p[0]||2000,(p[1]||1)-1,p[2]||1);
-  }
-  function inRange(date,start,end){
-    var d=parseDate(date),s=parseDate(start),e=parseDate(end);
-    s.setHours(0,0,0,0);e.setHours(23,59,59,999);
-    return d>=s&&d<=e;
-  }
-  function countSection(record,section){
-    var counts=record&&record.counts&&record.counts[section]?record.counts[section]:{};
-    return DENOMS.reduce(function(total,d){return total+money(counts[String(d)])*d},0);
-  }
-  function countTips(record){
-    var total=0;
-    var items=Array.isArray(record&&record.posItems)?record.posItems:[];
-    items.forEach(function(x){total+=money(x&&x.tip)});
-    return total+countSection(record,'tips');
-  }
-  function cashDifference(record){
-    var end=countSection(record,'end');
-    var hasEnd=end>0||!!(record&&record.endTime);
-    if(!hasEnd)return null;
-    var start=countSection(record,'start');
-    var received=countSection(record,'received');
-    var exchange=countSection(record,'exchange');
-    var tips=countTips(record);
-    var posItems=Array.isArray(record&&record.posItems)?record.posItems:[];
-    var gasItems=Array.isArray(record&&record.gasItems)?record.gasItems:[];
-    var posSales=posItems.reduce(function(total,x){return total+money(x&&x.sale)},0);
-    var gas=gasItems.reduce(function(total,x){return total+money(x&&x.cost)},0);
-    var bank=money(record&&record.uberPending);
-    var expected=start+posSales+received+tips+exchange-gas-bank;
+  function money(v){var n=Math.floor(Number(v||0));return Number.isFinite(n)&&n>0?n:0}
+  function signed(v){var n=Math.floor(Number(v||0));return Number.isFinite(n)?n:0}
+  function yen(n){return '¥'+Math.round(Number(n||0)).toLocaleString('ja-JP')}
+  function draftBox(){try{return JSON.parse(localStorage.getItem(DRAFTKEY)||'{}')||{}}catch(e){return{}}}
+  function draftState(){var b=draftBox();return b&&b.state?b.state:null}
+  function countSection(r,k){var c=r&&r.counts&&r.counts[k]?r.counts[k]:{};return DENOMS.reduce(function(s,d){return s+money(c[String(d)])*d},0)}
+  function countTips(r){var a=Array.isArray(r&&r.posItems)?r.posItems:[],v=0;a.forEach(function(x){v+=money(x&&x.tip)});return v+countSection(r,'tips')}
+  function difference(r){
+    if(!r)return null;
+    var end=countSection(r,'end');
+    if(!(end>0||r.endTime))return null;
+    var pos=Array.isArray(r.posItems)?r.posItems:[],gas=Array.isArray(r.gasItems)?r.gasItems:[];
+    var sales=pos.reduce(function(s,x){return s+money(x&&x.sale)},0);
+    var gasCost=gas.reduce(function(s,x){return s+money(x&&x.cost)},0);
+    var expected=countSection(r,'start')+sales+countSection(r,'received')+countTips(r)+countSection(r,'exchange')-gasCost-signed(r.uberPending);
     return end-expected;
   }
-  function draftBox(){
-    try{return JSON.parse(localStorage.getItem(DRAFTKEY)||'{}')||{}}
-    catch(e){return{}}
+  function formatDate(v){
+    var s=String(v||'').slice(0,10),p=s.split('-');
+    if(p.length!==3)return s;
+    var d=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+    return p[0]+'/'+p[1]+'/'+p[2]+'（'+'日月火水木金土'.charAt(d.getDay())+'）';
   }
-  function draftState(){
-    var box=draftBox();
-    return box&&box.state?box.state:null;
-  }
-  async function loadRecords(){
+  async function fetchRows(limit){
     var pin=localStorage.getItem(PINKEY)||'';
-    var current=draftState();
-    if(!pin)return current?[current]:[];
-    try{
-      var res=await fetch(API+'?limit=5000&ts='+Date.now(),{cache:'no-store',headers:{'x-app-pin':pin}});
-      var data=await res.json();
-      var rows=Array.isArray(data.records)?data.records:[];
-      if(current&&current.id){
-        var i=rows.findIndex(function(r){return r.id===current.id});
-        if(i>=0)rows[i]=current;else rows.push(current);
-      }
-      return rows;
-    }catch(e){return current?[current]:[]}
+    if(!pin)return [];
+    var res=await fetch(API+'?limit='+limit+'&ts='+Date.now(),{cache:'no-store',headers:{'x-app-pin':pin}});
+    var data=await res.json();
+    return Array.isArray(data.records)?data.records:[];
   }
-  function yen(n){return '¥'+Math.round(Number(n||0)).toLocaleString('ja-JP')}
-  function ensureCard(cards,id,label,value,sub){
-    var card=document.getElementById(id);
-    if(!card){
-      card=document.createElement('div');
-      card.id=id;
-      card.className='salesCard';
-      cards.appendChild(card);
-    }
-    card.innerHTML='<div class="label">'+label+'</div><div class="value '+(Number(value)<0?'bad':'')+'">'+yen(value)+'</div><div class="sub">'+sub+'</div>';
-  }
-  function ensureTextCard(cards,id,label,value,sub){
-    var card=document.getElementById(id);
-    if(!card){
-      card=document.createElement('div');
-      card.id=id;
-      card.className='salesCard';
-      cards.appendChild(card);
-    }
-    card.innerHTML='<div class="label">'+label+'</div><div class="value">'+value+'</div><div class="sub">'+sub+'</div>';
-  }
-  function formatDate(date){
-    var p=String(date||'').slice(0,10).split('-');
-    return p.length===3?p[0]+'/'+p[1]+'/'+p[2]:String(date||'');
-  }
-  function renderDifferenceComment(items){
-    var memo=document.getElementById('analysisMemo');
-    if(!memo)return;
-    var old=document.getElementById('analysisDifferenceComment');
-    if(!items.length){
-      if(old)old.remove();
-      return;
-    }
-    if(!old){
-      old=document.createElement('div');
-      old.id='analysisDifferenceComment';
-      old.style.cssText='margin-top:12px;padding-top:12px;border-top:1px solid #dbe3ec';
-      memo.appendChild(old);
-    }
-    var positive=items.filter(function(x){return x.diff>0});
-    var negative=items.filter(function(x){return x.diff<0});
-    var html='<b>差異が出た場合の確認コメント</b>';
-    html+='<div style="margin-top:8px;font-size:12px;color:#667085">差異が発生した日：'+items.map(function(x){return formatDate(x.date)+'（'+(x.diff>0?'+':'')+yen(x.diff)+'）'}).join('、')+'</div>';
-    html+='<ul style="margin:9px 0 0;padding-left:20px">';
-    if(positive.length){
-      html+='<li><b>プラス差異の主な原因候補：</b>現金売上やチップの入力漏れ、受取金・両替の入力漏れ、お釣りを少なく渡した、終了時の紙幣・硬貨を多く数えた可能性があります。</li>';
-    }
-    if(negative.length){
-      html+='<li><b>マイナス差異の主な原因候補：</b>お釣りの渡し過ぎ、売上の重複・過大入力、ガソリン代や銀行入金の入力漏れ、未記録の現金取り出し、終了時の紙幣・硬貨を少なく数えた可能性があります。</li>';
-    }
-    html+='<li><b>確認順：</b>POS明細の日付と金額 → お釣り → ガソリン・銀行入金 → 開始時と終了時の金種枚数、の順に確認してください。</li>';
-    html+='</ul>';
-    old.innerHTML=html;
-  }
-  async function renderExtraTotals(){
-    var cards=document.getElementById('analysisCards');
-    var start=document.getElementById('analysisStart');
-    var end=document.getElementById('analysisEnd');
-    if(!cards||!start||!end||!start.value||!end.value)return;
-    var rows=await loadRecords();
-    var tips=0,diff=0,positive=0,negative=0,diffDays=0,closedDays=0,diffItems=[];
-    rows.forEach(function(r){
-      if(!inRange(r.date,start.value,end.value))return;
-      tips+=countTips(r);
-      var d=cashDifference(r);
-      if(d===null)return;
-      closedDays++;
-      diff+=d;
-      if(d>0){positive+=d;diffDays++;diffItems.push({date:r.date,diff:d})}
-      if(d<0){negative+=d;diffDays++;diffItems.push({date:r.date,diff:d})}
-    });
-    diffItems.sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''))});
-    ensureCard(cards,'analysisTipTotalCard','チップ合計',tips,'選択期間のチップ');
-    ensureCard(cards,'analysisDiffTotalCard','差異合計',diff,'終了時入力済みの合計');
-    ensureCard(cards,'analysisPositiveDiffCard','プラス差異',positive,'理論値より多かった現金');
-    ensureCard(cards,'analysisNegativeDiffCard','マイナス差異',negative,'理論値より少なかった現金');
-    ensureTextCard(cards,'analysisDiffDaysCard','差異発生日数',diffDays+'日 / '+closedDays+'日','終了時入力済み');
-    renderDifferenceComment(diffItems);
-  }
-  function renderPosDateTimes(){
-    var host=document.getElementById('posList');
-    if(!host)return;
-    var dateInput=document.getElementById('workDate');
-    var state=draftState();
-    var date=(dateInput&&dateInput.value)||(state&&state.date)||'';
-    if(!date)return;
-    Array.prototype.forEach.call(host.children,function(item){
-      if(!item||!item.querySelector)return;
-      var text=String(item.textContent||'');
-      var match=text.match(/(?:^|\s)([01]?\d|2[0-3]):[0-5]\d(?:\s|$)/);
-      var time=match?match[0].trim():'';
-      var label='入力日時：'+formatDate(date)+(time?' '+time:'');
-      var badge=item.querySelector('.cb-pos-datetime');
-      if(!badge){
-        badge=document.createElement('span');
-        badge.className='badge ok cb-pos-datetime';
-        var row=item.querySelector('.row2')||item.querySelector('.itemMain')||item;
-        row.appendChild(badge);
-      }
-      if(badge.textContent!==label)badge.textContent=label;
-    });
-  }
-  function newestRecord(rows){
+  function newest(rows){
     return rows.filter(function(r){return r&&r.date}).sort(function(a,b){
-      var dateCompare=String(b.date||'').slice(0,10).localeCompare(String(a.date||'').slice(0,10));
-      if(dateCompare)return dateCompare;
-      return String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''));
+      var dc=String(b.date||'').slice(0,10).localeCompare(String(a.date||'').slice(0,10));
+      return dc||String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''));
     })[0]||null;
   }
-  var latestBusy=false;
-  async function openLatestRecord(){
-    var pin=localStorage.getItem(PINKEY)||'';
+  async function openLatest(){
     var main=document.getElementById('mainArea');
-    if(!pin||!main||main.classList.contains('hidden')||latestBusy)return false;
-    latestBusy=true;
+    if(startupDone||startupBusy||!main||main.classList.contains('hidden'))return;
+    startupBusy=true;
     try{
-      var rows=await loadRecords();
-      var latest=newestRecord(rows);
-      if(!latest)return true;
-      var token=String(latest.id||'')+'|'+String(latest.date||'')+'|'+String(latest.updatedAt||latest.createdAt||'');
-      var current=draftState();
-      var same=current&&String(current.id||'')===String(latest.id||'')&&String(current.date||'').slice(0,10)===String(latest.date||'').slice(0,10);
-      sessionStorage.setItem(LATESTKEY,token);
-      if(!same){
-        var box=draftBox();
-        box.state=latest;
-        box.updatedAt=new Date().toISOString();
-        localStorage.setItem(DRAFTKEY,JSON.stringify(box));
-        location.reload();
+      var rows=await fetchRows(100),cur=draftState();
+      if(cur)rows.push(cur);
+      var latest=newest(rows);
+      if(latest&&(!cur||String(cur.id)!==String(latest.id)||String(cur.date).slice(0,10)!==String(latest.date).slice(0,10))){
+        var box=draftBox();box.state=latest;box.updatedAt=new Date().toISOString();localStorage.setItem(DRAFTKEY,JSON.stringify(box));location.reload();return;
       }
-      return true;
-    }catch(e){return false}
-    finally{latestBusy=false}
+      startupDone=true;
+    }catch(e){startupDone=true}
+    finally{startupBusy=false}
+  }
+  function findPosPanel(){
+    var hs=document.querySelectorAll('#view-home h2,#view-home h3');
+    for(var i=0;i<hs.length;i++)if(String(hs[i].textContent||'').trim()==='POS明細')return hs[i].closest('.panel')||hs[i].parentElement;
+    return null;
+  }
+  function replaceTimeText(root,dateText){
+    var walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),nodes=[],n;
+    while((n=walker.nextNode()))nodes.push(n);
+    nodes.forEach(function(node){
+      if(node.parentElement&&node.parentElement.closest('button'))return;
+      var t=node.nodeValue||'';
+      if(/\d{4}\/\d{2}\/\d{2}/.test(t))return;
+      if(/(?:^|\s|\/)([01]?\d|2[0-3]):[0-5]\d(?:\s|$)/.test(t))node.nodeValue=t.replace(/([01]?\d|2[0-3]):([0-5]\d)/,dateText+' $1:$2');
+    });
+  }
+  function renderPosDates(){
+    var panel=findPosPanel();if(!panel)return;
+    var s=draftState(),input=document.getElementById('workDate'),date=(input&&input.value)||(s&&s.date)||'';
+    if(!date)return;
+    var dateText=formatDate(date);
+    panel.querySelectorAll('.item').forEach(function(item){replaceTimeText(item,dateText)});
+  }
+  function renderHomeDifference(){
+    var home=document.getElementById('view-home');if(!home)return;
+    var id='homeDifferenceComment',box=document.getElementById(id),d=difference(draftState());
+    if(d===null||d===0){if(box)box.remove();return}
+    if(!box){
+      box=document.createElement('section');box.id=id;box.className='panel';
+      var posPanel=findPosPanel();if(posPanel&&posPanel.parentNode)posPanel.insertAdjacentElement('afterend',box);else home.appendChild(box);
+    }
+    var cause=d>0
+      ?'現金売上・チップ・受取金・両替の入力漏れ、お釣りを少なく渡した、終了時の紙幣・硬貨を多く数えた可能性があります。'
+      :'お釣りの渡し過ぎ、売上の重複・過大入力、ガソリン代・銀行入金の入力漏れ、未記録の現金取り出し、終了時の紙幣・硬貨を少なく数えた可能性があります。';
+    box.innerHTML='<div class="head"><div><h2>差異の確認</h2><div class="help">現在開いている '+formatDate((draftState()||{}).date)+' の記録</div></div><div class="total '+(d<0?'bad':'good')+'">'+(d>0?'+':'')+yen(d)+'</div></div><div class="notice"><b>考えられる原因：</b>'+cause+'</div><div class="small"><b>確認順：</b>POS明細の日付と金額 → お釣り → ガソリン・銀行入金 → 開始時・終了時の金種枚数</div>';
+  }
+  function ensureCard(cards,id,label,value,sub,text){
+    var c=document.getElementById(id);if(!c){c=document.createElement('div');c.id=id;c.className='salesCard';cards.appendChild(c)}
+    c.innerHTML='<div class="label">'+label+'</div><div class="value '+(!text&&Number(value)<0?'bad':'')+'">'+(text?value:yen(value))+'</div><div class="sub">'+sub+'</div>';
+  }
+  async function renderAnalysisExtras(){
+    var cards=document.getElementById('analysisCards'),st=document.getElementById('analysisStart'),ed=document.getElementById('analysisEnd');
+    if(!cards||!st||!ed||!st.value||!ed.value||analysisBusy)return;
+    analysisBusy=true;
+    try{
+      if(!analysisCache)analysisCache=await fetchRows(5000);
+      var cur=draftState(),rows=analysisCache.slice();if(cur){var i=rows.findIndex(function(r){return r.id===cur.id});if(i>=0)rows[i]=cur;else rows.push(cur)}
+      var tips=0,total=0,pos=0,neg=0,days=0,closed=0;
+      rows.forEach(function(r){var date=String(r.date||'').slice(0,10);if(date<st.value||date>ed.value)return;tips+=countTips(r);var d=difference(r);if(d===null)return;closed++;total+=d;if(d>0){pos+=d;days++}if(d<0){neg+=d;days++}});
+      ensureCard(cards,'analysisTipTotalCard','チップ合計',tips,'選択期間のチップ');
+      ensureCard(cards,'analysisDiffTotalCard','差異合計',total,'終了時入力済みの合計');
+      ensureCard(cards,'analysisPositiveDiffCard','プラス差異',pos,'理論値より多かった現金');
+      ensureCard(cards,'analysisNegativeDiffCard','マイナス差異',neg,'理論値より少なかった現金');
+      ensureCard(cards,'analysisDiffDaysCard','差異発生日数',days+'日 / '+closed+'日','終了時入力済み',true);
+    }catch(e){}finally{analysisBusy=false}
   }
   var timer=null;
-  function schedule(){
-    clearTimeout(timer);
-    timer=setTimeout(function(){renderExtraTotals();renderPosDateTimes()},180);
-  }
-  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true});
-  document.addEventListener('change',schedule,true);
-  document.addEventListener('click',function(e){
-    schedule();
-    if(e.target&&e.target.id==='loginButton')setTimeout(openLatestRecord,500);
-  },true);
-  window.addEventListener('DOMContentLoaded',function(){
-    schedule();
-    var attempts=0;
-    var startup=setInterval(function(){
-      attempts++;
-      openLatestRecord().then(function(done){if(done||attempts>=12)clearInterval(startup)});
-    },500);
-    setTimeout(renderExtraTotals,700);
-    setTimeout(renderPosDateTimes,700);
-    setTimeout(renderExtraTotals,1600);
-    setTimeout(renderPosDateTimes,1600);
-  });
+  function schedule(){clearTimeout(timer);timer=setTimeout(function(){renderPosDates();renderHomeDifference();renderAnalysisExtras();openLatest()},120)}
+  new MutationObserver(schedule).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
+  document.addEventListener('change',function(){analysisCache=null;schedule()},true);
+  document.addEventListener('click',schedule,true);
+  window.addEventListener('DOMContentLoaded',function(){schedule();setTimeout(schedule,500);setTimeout(schedule,1200)});
 })();
 </script>`;
   html = html.replace('</body>', patch + '</body>');

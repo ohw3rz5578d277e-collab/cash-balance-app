@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>POSデータ復元</title>
+<style>
+body{margin:0;background:#f6f7f9;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111827}.wrap{max-width:720px;margin:auto;padding:16px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:20px;padding:16px;margin:12px 0;box-shadow:0 10px 24px rgba(15,23,42,.05)}h1{font-size:22px;margin:0 0 8px}.muted{font-size:13px;color:#667085;line-height:1.7}.status{font-weight:900;margin-top:12px}.ok{color:#047857}.bad{color:#b91c1c}.row{border-top:1px solid #eef2f7;padding:12px 0}.row:first-child{border-top:0}.date{font-weight:950}.small{font-size:12px;color:#667085;margin-top:4px}.btn{width:100%;border:0;border-radius:14px;padding:13px;font-weight:950;background:#111827;color:#fff;margin-top:12px}.btn.secondary{background:#fff;color:#111827;border:1px solid #e5e7eb}
+</style>
+</head>
+<body><div class="wrap"><div class="card"><h1>POSデータ復元</h1><div class="muted">D1・端末の下書き・未送信キューに残っているPOS明細を照合し、同じ明細を重複させずに復元します。復元前の状態は端末内へバックアップします。</div><div id="status" class="status">確認中…</div></div><div id="result" class="card"></div><button id="back" class="btn secondary" type="button">アプリへ戻る</button></div>
+<script>
+(function(){
+'use strict';
+var PINKEY='cash_balance_app_pin_v21',DRAFTKEY='cash_balance_app_draft_v21',OUTBOXKEY='cash_balance_app_save_outbox_v1',BACKUPKEY='cash_balance_app_pos_recovery_backup_v1',API='/api/records';
+function readJSON(key,fallback){try{var v=JSON.parse(localStorage.getItem(key)||'');return v||fallback}catch(e){return fallback}}
+function clone(x){return JSON.parse(JSON.stringify(x))}
+function itemKey(x){if(!x)return'';if(x.id)return'id:'+String(x.id);return ['v',x.sale||0,x.paid||0,x.change||0,x.tip||0,x.memo||'',x.time||'',x.createdAt||''].join('|')}
+function mergeItems(arrays){var out=[],seen={};arrays.forEach(function(a){(Array.isArray(a)?a:[]).forEach(function(x){var k=itemKey(x);if(!k||seen[k])return;seen[k]=1;out.push(clone(x))})});out.sort(function(a,b){return String(a.createdAt||a.time||'').localeCompare(String(b.createdAt||b.time||''))});return out}
+function newest(list){return list.slice().sort(function(a,b){return String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''))})[0]||null}
+async function fetchRows(){var pin=localStorage.getItem(PINKEY)||'';if(!pin)throw new Error('PINが端末に保存されていません。先に通常のアプリへログインしてください。');var r=await fetch(API+'?limit=5000&ts='+Date.now(),{cache:'no-store',headers:{'x-app-pin':pin}});var d=await r.json().catch(function(){return{}});if(!r.ok||d.ok===false)throw new Error(d.error||('取得エラー '+r.status));return Array.isArray(d.records)?d.records:[]}
+async function saveRecord(record){var pin=localStorage.getItem(PINKEY)||'';var r=await fetch(API,{method:'POST',cache:'no-store',headers:{'content-type':'application/json','x-app-pin':pin},body:JSON.stringify({record:record})});var d=await r.json().catch(function(){return{}});if(!r.ok||d.ok===false)throw new Error(d.error||('保存エラー '+r.status));return d.record||record}
+function setStatus(t,ok){var e=document.getElementById('status');e.textContent=t;e.className='status '+(ok===true?'ok':ok===false?'bad':'')}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]})}
+async function run(){
+  try{
+    var server=await fetchRows(),draft=readJSON(DRAFTKEY,{}),outbox=readJSON(OUTBOXKEY,{}),sources=server.map(function(r){return{kind:'server',record:r}});
+    if(draft&&draft.state)sources.push({kind:'draft',record:draft.state});
+    Object.keys(outbox||{}).forEach(function(k){var e=outbox[k];if(e&&e.record)sources.push({kind:'outbox',record:e.record})});
+    var groups={};sources.forEach(function(s){var r=s.record;if(!r||!r.date)return;var d=String(r.date).slice(0,10);(groups[d]||(groups[d]=[])).push(s)});
+    var plan=[];
+    Object.keys(groups).sort().reverse().forEach(function(date){
+      var g=groups[date],records=g.map(function(x){return x.record}),merged=mergeItems(records.map(function(r){return r.posItems}));
+      var serverRecords=g.filter(function(x){return x.kind==='server'}).map(function(x){return x.record});
+      var canonical=newest(serverRecords)||newest(records);if(!canonical)return;
+      var current=Array.isArray(canonical.posItems)?canonical.posItems:[];
+      if(merged.length>current.length)plan.push({date:date,canonical:canonical,merged:merged,before:current.length,after:merged.length,sources:g});
+    });
+    var backup={createdAt:new Date().toISOString(),server:server,draft:draft,outbox:outbox,plan:plan.map(function(p){return{date:p.date,recordId:p.canonical.id,before:p.before,after:p.after}})};
+    localStorage.setItem(BACKUPKEY,JSON.stringify(backup));
+    if(!plan.length){setStatus('復元できる未反映POSデータは見つかりませんでした。',false);document.getElementById('result').innerHTML='<div class="muted">D1・下書き・未送信キューの範囲では、現在のPOS件数を上回るデータが確認できませんでした。バックアップは保存済みです。</div>';return}
+    setStatus('復元処理中…');var restored=[];
+    for(var i=0;i<plan.length;i++){
+      var p=plan[i],r=clone(p.canonical);r.posItems=p.merged;r.updatedAt=new Date().toISOString();var saved=await saveRecord(r);restored.push({date:p.date,before:p.before,after:p.after,id:saved.id||r.id});
+      if(draft&&draft.state&&String(draft.state.date).slice(0,10)===p.date){draft.state=saved;draft.updatedAt=new Date().toISOString();localStorage.setItem(DRAFTKEY,JSON.stringify(draft))}
+    }
+    var html=restored.map(function(x){return '<div class="row"><div class="date">'+esc(x.date)+'</div><div class="small">POS '+x.before+'件 → '+x.after+'件（'+(x.after-x.before)+'件復元）</div></div>'}).join('');
+    document.getElementById('result').innerHTML=html;setStatus('POSデータを復元しました。',true);
+  }catch(e){setStatus('復元できませんでした：'+e.message,false);document.getElementById('result').innerHTML='<div class="muted">既存データの削除は行っていません。</div>'}
+}
+document.getElementById('back').onclick=function(){location.href='/'};run();
+})();
+</script></body></html>

@@ -45,6 +45,56 @@ function safeParsePayload(payload) {
   }
 }
 
+function itemKey(item) {
+  if (!item || typeof item !== "object") return "";
+  if (text(item.id)) return `id:${text(item.id)}`;
+  return [
+    "legacy",
+    item.sale ?? "",
+    item.paid ?? "",
+    item.change ?? "",
+    item.tip ?? "",
+    item.cost ?? "",
+    item.memo ?? "",
+    item.time ?? "",
+    item.createdAt ?? ""
+  ].join("|");
+}
+
+function mergeAppendOnlyItems(serverItems, incomingItems) {
+  const out = [];
+  const index = new Map();
+
+  for (const item of Array.isArray(serverItems) ? serverItems : []) {
+    const key = itemKey(item);
+    if (!key || index.has(key)) continue;
+    index.set(key, out.length);
+    out.push(item);
+  }
+
+  for (const item of Array.isArray(incomingItems) ? incomingItems : []) {
+    const key = itemKey(item);
+    if (!key) continue;
+    if (index.has(key)) {
+      out[index.get(key)] = item;
+    } else {
+      index.set(key, out.length);
+      out.push(item);
+    }
+  }
+
+  return out;
+}
+
+function isOlderClientRecord(record, existing) {
+  if (!existing) return false;
+  const serverUpdatedAt = Date.parse(text(existing.updated_at));
+  const clientUpdatedAt = Date.parse(text(record.updatedAt || record.updated_at));
+  if (!Number.isFinite(serverUpdatedAt)) return false;
+  if (!Number.isFinite(clientUpdatedAt)) return true;
+  return clientUpdatedAt < serverUpdatedAt;
+}
+
 async function ensureAuthorized(request, env) {
   if (!env.DB) {
     return {
@@ -141,8 +191,15 @@ export async function onRequest(context) {
       }
 
       const existing = await env.DB.prepare(
-        `SELECT created_at FROM cash_records WHERE id = ?`
+        `SELECT created_at, updated_at, payload
+         FROM cash_records
+         WHERE id = ?`
       ).bind(id).first();
+
+      const existingPayload = existing
+        ? safeParsePayload(existing.payload)
+        : {};
+      const staleClient = isOlderClientRecord(record, existing);
 
       const createdAt =
         text(record.createdAt || record.created_at || existing?.created_at) ||
@@ -150,13 +207,31 @@ export async function onRequest(context) {
 
       const updatedAt = nowIso();
 
-      const savedRecord = {
-        ...record,
-        id,
-        date: workDate,
-        createdAt,
-        updatedAt
-      };
+      let savedRecord;
+      let staleMerge = false;
+
+      if (staleClient) {
+        staleMerge = true;
+        savedRecord = {
+          ...existingPayload,
+          id,
+          date: text(existingPayload.date || workDate) || workDate,
+          createdAt: text(existingPayload.createdAt || existingPayload.created_at || existing?.created_at) || createdAt,
+          updatedAt,
+          posItems: mergeAppendOnlyItems(existingPayload.posItems, record.posItems),
+          gasItems: mergeAppendOnlyItems(existingPayload.gasItems, record.gasItems)
+        };
+      } else {
+        savedRecord = {
+          ...record,
+          id,
+          date: workDate,
+          createdAt,
+          updatedAt
+        };
+      }
+
+      const savedWorkDate = text(savedRecord.date || workDate) || workDate;
 
       await env.DB.prepare(
         `INSERT INTO cash_records (id, work_date, payload, created_at, updated_at)
@@ -167,7 +242,7 @@ export async function onRequest(context) {
            updated_at = excluded.updated_at`
       ).bind(
         id,
-        workDate,
+        savedWorkDate,
         JSON.stringify(savedRecord),
         createdAt,
         updatedAt
@@ -175,7 +250,11 @@ export async function onRequest(context) {
 
       return json({
         ok: true,
-        record: savedRecord
+        record: savedRecord,
+        staleMerge,
+        protection: staleMerge
+          ? "stale_client_preserved_server_and_merged_items"
+          : "normal_save"
       });
     }
 

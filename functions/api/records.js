@@ -212,11 +212,13 @@ export async function onRequest(context) {
 
       if (staleClient) {
         staleMerge = true;
+        // Keep the user's latest form/count inputs, but never let an older save
+        // erase POS or gas items that are already present in D1.
         savedRecord = {
-          ...existingPayload,
+          ...record,
           id,
-          date: text(existingPayload.date || workDate) || workDate,
-          createdAt: text(existingPayload.createdAt || existingPayload.created_at || existing?.created_at) || createdAt,
+          date: workDate,
+          createdAt: text(record.createdAt || record.created_at || existingPayload.createdAt || existingPayload.created_at || existing?.created_at) || createdAt,
           updatedAt,
           posItems: mergeAppendOnlyItems(existingPayload.posItems, record.posItems),
           gasItems: mergeAppendOnlyItems(existingPayload.gasItems, record.gasItems)
@@ -253,7 +255,7 @@ export async function onRequest(context) {
         record: savedRecord,
         staleMerge,
         protection: staleMerge
-          ? "stale_client_preserved_server_and_merged_items"
+          ? "stale_client_kept_latest_form_and_preserved_items"
           : "normal_save"
       });
     }

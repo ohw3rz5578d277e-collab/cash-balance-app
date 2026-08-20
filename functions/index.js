@@ -81,7 +81,7 @@ window.addEventListener('pagehide',emergencyFlush);
 window.addEventListener('DOMContentLoaded',function(){seedCurrentDraft();schedule();setTimeout(schedule,400);setTimeout(schedule,1000);setTimeout(flushOutbox,100)});
 })();
 </script>`;
-  html = html.replace('</body>', patch + '</body>');
+  html = html.replace('</body>', patch + '<script src="/bank-deposit-reconcile.js?v=20260820-bank1"></script></body>');
   const headers = new Headers(response.headers);
   headers.set('Cache-Control','no-store, no-cache, must-revalidate, max-age=0');
   return new Response(html,{status:response.status,statusText:response.statusText,headers});

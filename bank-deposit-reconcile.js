@@ -1,0 +1,25 @@
+(function(){
+'use strict';
+var DRAFTKEY='cash_balance_app_draft_v21';
+function num(v){var n=Math.floor(Number(v));return Number.isFinite(n)?n:0}
+function yen(v){return '¥'+Math.abs(Math.round(num(v))).toLocaleString('ja-JP')}
+function signedYen(v){var n=Math.round(num(v));return (n>0?'+':n<0?'-':'')+yen(n)}
+function readBox(){try{return JSON.parse(localStorage.getItem(DRAFTKEY)||'{}')||{}}catch(e){return{}}}
+function state(){var b=readBox();return b&&b.state?b.state:null}
+function hasActual(s){return !!s&&s.bankDepositActual!==undefined&&s.bankDepositActual!==null&&String(s.bankDepositActual)!==''}
+function registered(s){return Math.max(0,num(s&&s.uberPending))}
+function actual(s){return hasActual(s)?Math.max(0,num(s.bankDepositActual)):null}
+function result(s){var reg=registered(s),act=actual(s);if(!reg&&act===null)return{kind:'none',reg:0,act:null,diff:null,text:'銀行入金の登録はありません'};if(reg&&!hasActual(s))return{kind:'pending',reg:reg,act:null,diff:null,text:'実際に銀行へ入金した金額を入力してください'};var a=act===null?0:act,d=a-reg;return{kind:d===0?'ok':'ng',reg:reg,act:a,diff:d,text:d===0?'登録額と実際の入金額が一致しています':'銀行入金額が一致していません'}}
+function saveActual(value){var box=readBox(),s=box.state;if(!s)return;var raw=String(value==null?'':value).trim();if(raw==='')delete s.bankDepositActual;else s.bankDepositActual=Math.max(0,num(raw));s.updatedAt=new Date().toISOString();box.state=s;box.updatedAt=s.updatedAt;localStorage.setItem(DRAFTKEY,JSON.stringify(box))}
+function card(label,value,sub,cls){return '<div class="salesCard '+(cls||'')+'"><div class="label">'+label+'</div><div class="value">'+value+'</div><div class="sub">'+sub+'</div></div>'}
+function ensurePanel(){var view=document.getElementById('view-exchange');if(!view)return null;var panel=document.getElementById('bankDepositReconcilePanel');if(!panel){panel=document.createElement('section');panel.id='bankDepositReconcilePanel';panel.className='panel';panel.innerHTML='<div class="head"><div><h2>銀行入金の照合</h2><div class="help">アプリに登録した銀行入金額と、実際に銀行へ入金した金額を照合します。</div></div></div><div class="salesDash" id="bankDepositReconcileCards"></div><div style="margin-top:12px"><label for="bankDepositActualInput">実際に銀行へ入金した金額</label><input id="bankDepositActualInput" type="number" inputmode="numeric" min="0" step="1" placeholder="例：25000"></div><div id="bankDepositReconcileStatus" class="notice" style="margin-bottom:0"></div><div class="small" style="margin-top:8px">理論上の終了金額には、これまで通り「登録上の銀行入金額」だけを使用します。この入力は照合専用です。</div>';view.prepend(panel);var input=panel.querySelector('#bankDepositActualInput');input.addEventListener('change',function(){saveActual(input.value);render()});input.addEventListener('blur',function(){saveActual(input.value);render()})}return panel}
+function alertHtml(r){if(r.kind==='ok')return '<b>一致：</b>'+r.text;if(r.kind==='ng')return '<b>要確認：</b>'+r.text+'　差額 '+signedYen(r.diff);if(r.kind==='pending')return '<b>未照合：</b>'+r.text;return '<b>銀行入金：</b>'+r.text}
+function renderHomeAlert(r){var home=document.getElementById('view-home');if(!home)return;var el=document.getElementById('bankDepositHomeAlert');if(r.kind!=='ng'&&r.kind!=='pending'){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='bankDepositHomeAlert';el.className='notice';var first=home.querySelector('.panel');if(first)first.insertAdjacentElement('beforebegin',el);else home.prepend(el)}el.innerHTML=alertHtml(r)}
+function renderEndAlert(r){var view=document.getElementById('view-end');if(!view)return;var el=document.getElementById('bankDepositEndAlert');if(r.kind!=='ng'&&r.kind!=='pending'){if(el)el.remove();return}if(!el){el=document.createElement('div');el.id='bankDepositEndAlert';el.className='notice';view.prepend(el)}el.innerHTML=alertHtml(r)}
+function render(){var s=state();if(!s)return;var panel=ensurePanel(),r=result(s);if(panel){var cards=panel.querySelector('#bankDepositReconcileCards'),input=panel.querySelector('#bankDepositActualInput'),status=panel.querySelector('#bankDepositReconcileStatus');if(cards)cards.innerHTML=card('登録上の銀行入金額',yen(r.reg),'理論現金から差し引く金額','')+card('実際の銀行入金額',r.act===null?'未入力':yen(r.act),'銀行明細・入金票の実額','')+card('差額',r.diff===null?'未照合':signedYen(r.diff),r.kind==='ok'?'一致':r.kind==='ng'?'要確認':'実額を入力','');if(input&&document.activeElement!==input)input.value=r.act===null?'':String(r.act);if(status){status.innerHTML=alertHtml(r);status.style.borderColor=r.kind==='ng'?'#fecaca':r.kind==='ok'?'#bbf7d0':'#fde68a';status.style.background=r.kind==='ng'?'#fef2f2':r.kind==='ok'?'#ecfdf5':'#fffbeb';status.style.color=r.kind==='ng'?'#991b1b':r.kind==='ok'?'#065f46':'#92400e'}}renderHomeAlert(r);renderEndAlert(r)}
+var queued=false;function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;render()})}
+document.addEventListener('input',function(e){if(e.target&&e.target.id==='uberPending')schedule()},true);
+document.addEventListener('change',schedule,true);
+document.addEventListener('click',schedule,true);
+window.addEventListener('DOMContentLoaded',function(){render();setTimeout(render,350);setTimeout(render,1000)});
+})();

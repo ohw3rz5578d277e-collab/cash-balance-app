@@ -61,26 +61,46 @@ function itemKey(item) {
   ].join("|");
 }
 
-function mergeAppendOnlyItems(serverItems, incomingItems) {
+function mergeConcurrentItems(serverItems, incomingItems, clientUpdatedAt) {
+  const server = Array.isArray(serverItems) ? serverItems : [];
+  const incoming = Array.isArray(incomingItems) ? incomingItems : [];
+  const incomingByKey = new Map();
   const out = [];
-  const index = new Map();
+  const clientTime = Date.parse(text(clientUpdatedAt));
 
-  for (const item of Array.isArray(serverItems) ? serverItems : []) {
+  for (const item of incoming) {
     const key = itemKey(item);
-    if (!key || index.has(key)) continue;
-    index.set(key, out.length);
-    out.push(item);
+    if (!key || incomingByKey.has(key)) continue;
+    incomingByKey.set(key, item);
   }
 
-  for (const item of Array.isArray(incomingItems) ? incomingItems : []) {
-    const key = itemKey(item);
+  for (const serverItem of server) {
+    const key = itemKey(serverItem);
     if (!key) continue;
-    if (index.has(key)) {
-      out[index.get(key)] = item;
-    } else {
-      index.set(key, out.length);
-      out.push(item);
+
+    if (incomingByKey.has(key)) {
+      out.push(incomingByKey.get(key));
+      incomingByKey.delete(key);
+      continue;
     }
+
+    const itemCreatedAt = Date.parse(text(serverItem.createdAt || serverItem.created_at));
+    const definitelyNewerThanClient =
+      Number.isFinite(clientTime) &&
+      Number.isFinite(itemCreatedAt) &&
+      itemCreatedAt > clientTime;
+
+    const cannotProveClientHadItem =
+      !Number.isFinite(clientTime) ||
+      !Number.isFinite(itemCreatedAt);
+
+    if (definitelyNewerThanClient || cannotProveClientHadItem) {
+      out.push(serverItem);
+    }
+  }
+
+  for (const item of incomingByKey.values()) {
+    out.push(item);
   }
 
   return out;
@@ -200,6 +220,7 @@ export async function onRequest(context) {
         ? safeParsePayload(existing.payload)
         : {};
       const staleClient = isOlderClientRecord(record, existing);
+      const clientUpdatedAt = text(record.updatedAt || record.updated_at);
 
       const createdAt =
         text(record.createdAt || record.created_at || existing?.created_at) ||
@@ -212,16 +233,15 @@ export async function onRequest(context) {
 
       if (staleClient) {
         staleMerge = true;
-        // Keep the user's latest form/count inputs, but never let an older save
-        // erase POS or gas items that are already present in D1.
         savedRecord = {
+          ...existingPayload,
           ...record,
           id,
           date: workDate,
           createdAt: text(record.createdAt || record.created_at || existingPayload.createdAt || existingPayload.created_at || existing?.created_at) || createdAt,
           updatedAt,
-          posItems: mergeAppendOnlyItems(existingPayload.posItems, record.posItems),
-          gasItems: mergeAppendOnlyItems(existingPayload.gasItems, record.gasItems)
+          posItems: mergeConcurrentItems(existingPayload.posItems, record.posItems, clientUpdatedAt),
+          gasItems: mergeConcurrentItems(existingPayload.gasItems, record.gasItems, clientUpdatedAt)
         };
       } else {
         savedRecord = {
@@ -255,7 +275,7 @@ export async function onRequest(context) {
         record: savedRecord,
         staleMerge,
         protection: staleMerge
-          ? "stale_client_kept_latest_form_and_preserved_items"
+          ? "stale_client_preserved_concurrent_items_and_honored_known_deletions"
           : "normal_save"
       });
     }

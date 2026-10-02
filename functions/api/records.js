@@ -162,17 +162,25 @@ export async function onRequest(context) {
   try {
     if (request.method === "GET") {
       const url = new URL(request.url);
+      const recordId = text(url.searchParams.get("id"));
       const limit = Math.min(
-        Math.max(Number(url.searchParams.get("limit") || 500), 1),
+        Math.max(Number(url.searchParams.get("limit") || 100), 1),
         1000
       );
 
-      const result = await env.DB.prepare(
-        `SELECT id, work_date, payload, created_at, updated_at
-         FROM cash_records
-         ORDER BY work_date DESC, updated_at DESC
-         LIMIT ?`
-      ).bind(limit).all();
+      const result = recordId
+        ? await env.DB.prepare(
+            `SELECT id, work_date, payload, created_at, updated_at
+             FROM cash_records
+             WHERE id = ?
+             LIMIT 1`
+          ).bind(recordId).all()
+        : await env.DB.prepare(
+            `SELECT id, work_date, payload, created_at, updated_at
+             FROM cash_records
+             ORDER BY work_date DESC, updated_at DESC
+             LIMIT ?`
+          ).bind(limit).all();
 
       const records = (result.results || []).map((row) => {
         const payload = safeParsePayload(row.payload);

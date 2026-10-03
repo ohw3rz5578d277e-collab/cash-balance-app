@@ -95,7 +95,7 @@ document.addEventListener('change',function(){analysisCache=null;diagnosisCache=
 document.addEventListener('click',function(e){var go=e.target&&e.target.closest?e.target.closest('[data-home-go]'):null;if(go){e.preventDefault();goHomeAction(go.dataset.homeGo)}schedule();setTimeout(function(){var r=draftState(),n=Array.isArray(r&&r.posItems)?r.posItems.length:0;if(n>lastPosCount){lastPosCount=n;diagnosisCache=null;queueRecord(r,true)}},0)},true);
 window.addEventListener('online',function(){scheduleFlush(0)});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')emergencyFlush();else scheduleFlush(0)});
-window.addEventListener('pagehide',emergencyFlush);
+window.addEventListener('pagehide',emergencyFlush);window.addEventListener('beforeunload',emergencyFlush);
 window.addEventListener('DOMContentLoaded',function(){seedCurrentDraft();schedule();setTimeout(schedule,400);setTimeout(schedule,1000);setTimeout(flushOutbox,100)});
 })();
 </script>`;

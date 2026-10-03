@@ -249,7 +249,8 @@ export async function onRequest(context) {
           createdAt: text(record.createdAt || record.created_at || existingPayload.createdAt || existingPayload.created_at || existing?.created_at) || createdAt,
           updatedAt,
           posItems: mergeConcurrentItems(existingPayload.posItems, record.posItems, clientUpdatedAt),
-          gasItems: mergeConcurrentItems(existingPayload.gasItems, record.gasItems, clientUpdatedAt)
+          gasItems: mergeConcurrentItems(existingPayload.gasItems, record.gasItems, clientUpdatedAt),
+          attendanceLogs: Array.isArray(record.attendanceLogs) ? mergeConcurrentItems(existingPayload.attendanceLogs, record.attendanceLogs, clientUpdatedAt) : existingPayload.attendanceLogs
         };
       } else {
         savedRecord = {

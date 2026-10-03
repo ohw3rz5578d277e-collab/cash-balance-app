@@ -163,6 +163,8 @@ export async function onRequest(context) {
     if (request.method === "GET") {
       const url = new URL(request.url);
       const recordId = text(url.searchParams.get("id"));
+      const startDate = text(url.searchParams.get("start")).slice(0, 10);
+      const endDate = text(url.searchParams.get("end")).slice(0, 10);
       const limit = Math.min(
         Math.max(Number(url.searchParams.get("limit") || 100), 1),
         1000
@@ -175,6 +177,14 @@ export async function onRequest(context) {
              WHERE id = ?
              LIMIT 1`
           ).bind(recordId).all()
+        : startDate && endDate
+        ? await env.DB.prepare(
+            `SELECT id, work_date, payload, created_at, updated_at
+             FROM cash_records
+             WHERE work_date >= ? AND work_date <= ?
+             ORDER BY work_date DESC, updated_at DESC
+             LIMIT ?`
+          ).bind(startDate, endDate, limit).all()
         : await env.DB.prepare(
             `SELECT id, work_date, payload, created_at, updated_at
              FROM cash_records

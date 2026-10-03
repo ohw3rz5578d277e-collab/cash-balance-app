@@ -181,7 +181,7 @@ export async function onRequest(context) {
         ? await env.DB.prepare(
             `SELECT id, work_date, payload, created_at, updated_at
              FROM cash_records
-             WHERE work_date >= ? AND work_date <= ?
+             WHERE work_date BETWEEN ? AND ?
              ORDER BY work_date DESC, updated_at DESC
              LIMIT ?`
           ).bind(startDate, endDate, limit).all()

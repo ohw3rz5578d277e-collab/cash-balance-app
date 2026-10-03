@@ -90,5 +90,3 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 window.addEventListener('pagehide',emergencyFlush);window.addEventListener('beforeunload',emergencyFlush);
 window.addEventListener('DOMContentLoaded',function(){seedCurrentDraft();schedule();setTimeout(schedule,400);setTimeout(schedule,1000);setTimeout(flushOutbox,100)});
 })();
-</script>`;
-  html = html.replace('</body>', patch + '<script src="/bank-deposit-reconcile.js?v=20261003-bank7"></script><script src="/attendance.js?v=20261003-att6">

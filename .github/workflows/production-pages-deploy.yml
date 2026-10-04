@@ -1,0 +1,69 @@
+name: Production Pages Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact approved main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cash-balance-pages-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact approved SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+
+      - name: Verify exact main SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.expected_sha }}"
+          git fetch origin main --depth=1
+          test "$(git rev-parse origin/main)" = "${{ inputs.expected_sha }}"
+          echo "EXACT_HEAD_VERIFIED=PASS"
+
+      - name: Syntax and regression gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check home-dashboard.js
+          grep -Fq '#view-home{display:none}' home-dashboard.js
+          grep -Fq '#view-home.active{display:flex;flex-direction:column;gap:12px}' home-dashboard.js
+          grep -Fq 'function forgetDeletedRecord(id)' home-dashboard.js
+          grep -Fq '__cashDeletingRecordId' home-dashboard.js
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("functions/index.js").read_text()
+          start=src.find("<script>")
+          end=src.find("</script>`;",start)
+          if start < 0 or end <= start:
+              raise SystemExit("inline script boundary missing")
+          Path("/tmp/cash-balance-inline.js").write_text(src[start+8:end])
+          PY
+          node --check /tmp/cash-balance-inline.js
+          echo "PRODUCTION_PREFLIGHT=PASS"
+
+      - name: Deploy Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: "799b203a471e51a791129a5ca97a9b2b"
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npx --yes wrangler@4.147.0 pages deploy . \
+            --project-name=cash-balance-app \
+            --branch=main \
+            --commit-hash="${{ inputs.expected_sha }}" \
+            --commit-dirty=false

@@ -169,8 +169,24 @@ export async function onRequest(context) {
         Math.max(Number(url.searchParams.get("limit") || 100), 1),
         1000
       );
+      const overlapStart = text(url.searchParams.get("bank_overlap_start")).slice(0, 10);
+      const overlapEnd = text(url.searchParams.get("bank_overlap_end")).slice(0, 10);
+      const excludeId = text(url.searchParams.get("exclude_id"));
 
-      const result = recordId
+      const result = overlapStart && overlapEnd
+        ? await env.DB.prepare(
+            `SELECT id, work_date, payload, created_at, updated_at
+             FROM cash_records
+             WHERE (? = '' OR id <> ?)
+               AND json_extract(payload, '$.bankDepositPeriodStart') IS NOT NULL
+               AND json_extract(payload, '$.bankDepositPeriodEnd') IS NOT NULL
+               AND json_extract(payload, '$.bankDepositActual') IS NOT NULL
+               AND json_extract(payload, '$.bankDepositPeriodStart') <= ?
+               AND json_extract(payload, '$.bankDepositPeriodEnd') >= ?
+             ORDER BY work_date DESC, updated_at DESC
+             LIMIT 1`
+          ).bind(excludeId, excludeId, overlapEnd, overlapStart).all()
+        : recordId
         ? await env.DB.prepare(
             `SELECT id, work_date, payload, created_at, updated_at
              FROM cash_records

@@ -95,7 +95,7 @@ async function renderAnalysisExtras(){var cards=document.getElementById('analysi
 var timer=null;function schedule(){clearTimeout(timer);timer=setTimeout(function(){renderHomeSummary();renderSettlement();renderPeriodFold();hideLegacyHome();prioritizeHome();renderPosDates();renderHomeDifference();renderAnalysisExtras();renderDataCheck();openLatest()},100)}
 
 document.addEventListener('change',function(e){diagnosisCache=null;var t=e&&e.target;if(t&&(t.id==='analysisStart'||t.id==='analysisEnd'||t.id==='analysisQuick'))analysisCache=null;schedule()},true);
-document.addEventListener('click',function(e){var go=e.target&&e.target.closest?e.target.closest('[data-home-go]'):null;if(go){e.preventDefault();goHomeAction(go.dataset.homeGo)}setTimeout(function(){var r=draftState(),n=Array.isArray(r&&r.posItems)?r.posItems.length:0;if(n>lastPosCount){lastPosCount=n;diagnosisCache=null;queueRecord(r,true)}},0)},true);
+document.addEventListener('click',function(e){var go=e.target&&e.target.closest?e.target.closest('[data-home-go]'):null;if(go){e.preventDefault();goHomeAction(go.dataset.homeGo)}var posAction=e.target&&e.target.closest?e.target.closest('#posAddButton,#posRegisterButton,[data-pos-register],.pos-register,.posAdd'):null;if(posAction)setTimeout(function(){var r=draftState(),n=Array.isArray(r&&r.posItems)?r.posItems.length:0;if(n>lastPosCount){lastPosCount=n;diagnosisCache=null;queueRecord(r,true)}},0)},true);
 window.addEventListener('online',function(){scheduleFlush(0)});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')emergencyFlush();else scheduleFlush(0)});
 window.addEventListener('pagehide',emergencyFlush);window.addEventListener('beforeunload',emergencyFlush);

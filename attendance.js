@@ -31,5 +31,5 @@ var q=false;function schedule(){if(q)return;q=true;requestAnimationFrame(functio
 window.addEventListener('DOMContentLoaded',function(){render();setTimeout(render,500);setTimeout(render,1400);setTimeout(syncD1,1600)});
 window.addEventListener('online',syncD1);
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')syncD1()});
-document.addEventListener('click',function(){setTimeout(schedule,0)},true);
+
 })();

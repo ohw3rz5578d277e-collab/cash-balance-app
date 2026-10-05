@@ -90,5 +90,5 @@ document.addEventListener('click',function(e){var go=e.target&&e.target.closest?
 window.addEventListener('online',function(){scheduleFlush(0)});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')emergencyFlush();else scheduleFlush(0)});
 window.addEventListener('pagehide',emergencyFlush);window.addEventListener('beforeunload',emergencyFlush);
-function bootHomeDashboard(){seedCurrentDraft();schedule();setTimeout(schedule,400);setTimeout(schedule,1000);setTimeout(flushOutbox,100)}if(document.readyState==='loading'){window.addEventListener('DOMContentLoaded',bootHomeDashboard,{once:true})}else{bootHomeDashboard()}
+function bootHomeDashboard(){seedCurrentDraft();schedule();setTimeout(flushOutbox,100)}if(document.readyState==='loading'){window.addEventListener('DOMContentLoaded',bootHomeDashboard,{once:true})}else{bootHomeDashboard()}
 })();

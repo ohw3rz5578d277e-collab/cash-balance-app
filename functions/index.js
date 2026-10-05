@@ -102,7 +102,7 @@ window.addEventListener('pagehide',emergencyFlush);window.addEventListener('befo
 window.addEventListener('DOMContentLoaded',function(){seedCurrentDraft();schedule();setTimeout(schedule,400);setTimeout(schedule,1000);setTimeout(flushOutbox,100)});
 })();
 </script>`;
-  html = html.replace('</body>', patch + '<script src="/bank-deposit-reconcile.js?v=20261003-bank7"></script><script src="/attendance.js?v=20261003-att6"></script></body>');
+  html = html.replace('</body>', patch + '<script src="/bank-deposit-reconcile.js?v=20261005-bank8"></script><script src="/attendance.js?v=20261005-att7"></script></body>');
   const headers = new Headers(response.headers);
   headers.set('Cache-Control','no-store, no-cache, must-revalidate, max-age=0');
   return new Response(html,{status:response.status,statusText:response.statusText,headers});

@@ -57,5 +57,5 @@ async function render(){var s=state();if(!s)return;if(!hasValue(s,'bankDepositAc
 var queued=false;function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;render()})}
 document.addEventListener('input',function(e){if(e.target&&e.target.id==='uberPending')schedule()},true);
 document.addEventListener('change',function(e){var t=e&&e.target;if(t&&(t.id==='bankDepositPeriodStartInput'||t.id==='bankDepositPeriodEndInput'||t.id==='bankDepositKeepInput'||t.id==='bankDepositSpentInput'||t.id==='bankDepositActualInput'||t.id==='uberPending'))schedule()},true);
-window.addEventListener('DOMContentLoaded',function(){render();setTimeout(render,350);setTimeout(render,1000)});
+window.addEventListener('DOMContentLoaded',function(){render()});
 })();

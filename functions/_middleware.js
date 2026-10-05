@@ -61,7 +61,7 @@ async function renderAnalysis(){ensureAnalysis();var q=document.getElementById('
 function ensureBankDeposit(){var input=document.getElementById('uberPending'),view=document.getElementById('view-exchange');if(!input||!view)return;var oldWrap=input.closest('div');if(!oldWrap)return;var oldPanel=document.getElementById('bankDepositPanel');if(oldPanel)oldPanel.style.display='none';oldWrap.style.display='none';input.setAttribute('aria-hidden','true');input.tabIndex=-1}
 function syncVis(){var main=document.getElementById('mainArea'),ok=main&&!main.classList.contains('hidden');['cb-custom-nav','cb-menu-button'].forEach(function(id){var e=document.getElementById(id);if(e)e.style.display=ok?'':'none'})}
 function run(){ensureNav();ensureTipButton();ensureDefaultButton();ensureAnalysis();foldHistory();ensureBankDeposit();syncVis()}
-window.addEventListener('DOMContentLoaded',function(){run();setTimeout(run,250);setTimeout(run,900)})
+window.addEventListener('DOMContentLoaded',function(){run()})
 })();
 </script>`;
 

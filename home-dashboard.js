@@ -1,94 +1,86 @@
 (function(){
 'use strict';
-var PINKEY='cash_balance_app_pin_v21',DRAFTKEY='cash_balance_app_draft_v21',API='/api/records';
-var OUTBOXKEY='cash_balance_app_save_outbox_v1',BACKUPKEY='cash_balance_app_recovery_v1';
-var DENOMS=[10000,5000,2000,1000,500,100,50,10,5,1];
-var startupDone=false,startupBusy=false,analysisBusy=false,analysisCache=null,diagnosisCache=null,dataCheckBusy=false,dataCheckAt=0,dataCheckCache=null;
-var flushBusy=false,flushTimer=null,lastPosCount=-1,retryStep=0,cloudPausedUntil=0;
-function money(v){var n=Math.floor(Number(v||0));return Number.isFinite(n)&&n>0?n:0}
-function signed(v){var n=Math.floor(Number(v||0));return Number.isFinite(n)?n:0}
-function yen(n){return '¥'+Math.round(Number(n||0)).toLocaleString('ja-JP')}
-function draftBox(){try{return JSON.parse(localStorage.getItem(DRAFTKEY)||'{}')||{}}catch(e){return{}}}
-function draftState(){var b=draftBox();return b&&b.state?b.state:null}
-function readOutbox(){try{var x=JSON.parse(localStorage.getItem(OUTBOXKEY)||'{}');return x&&typeof x==='object'?x:{}}catch(e){return{}}}
-function writeOutbox(x){try{nativeSetItem.call(localStorage,OUTBOXKEY,JSON.stringify(x||{}))}catch(e){}}
-function outboxCount(){return Object.keys(readOutbox()).length}
-function saveRecovery(r){if(!r||!r.id)return;try{nativeSetItem.call(localStorage,BACKUPKEY,JSON.stringify({record:r,savedAt:new Date().toISOString()}))}catch(e){}}
-function restoreRecovery(){try{var x=JSON.parse(localStorage.getItem(BACKUPKEY)||'null'),r=x&&x.record;if(!r||!r.id)return;var box=readOutbox(),id=String(r.id);if(!box[id]){box[id]={record:r,signature:recordSignature(r),queuedAt:x.savedAt||new Date().toISOString(),attempts:0};writeOutbox(box)}}catch(e){}}
-function clearRecoveryIfSynced(r){try{var x=JSON.parse(localStorage.getItem(BACKUPKEY)||'null'),b=x&&x.record;if(b&&r&&String(b.id)===String(r.id)&&recordSignature(b)===recordSignature(r))nativeSetItem.call(localStorage,BACKUPKEY,'')}catch(e){}}
-function recordSignature(r){return [String(r&&r.updatedAt||''),syncComparable(r)].join('|')}
-function setSaveStatus(ok,text){var el=document.getElementById('statusText');if(!el)return;el.textContent=text;if(ok)el.classList.add('ok');else el.classList.remove('ok')}
-function localPendingText(){return outboxCount()?'端末保存済み・クラウド同期待ち':'端末保存済み'}
-function queueRecord(r,immediate){if(!r||!r.id)return;saveRecovery(r);var box=readOutbox();box[String(r.id)]={record:JSON.parse(JSON.stringify(r)),signature:recordSignature(r),queuedAt:new Date().toISOString(),attempts:0};writeOutbox(box);setSaveStatus(false,localPendingText());if(Date.now()>=cloudPausedUntil)scheduleFlush(immediate?0:250)}
-function forgetDeletedRecord(id){if(!id)return;id=String(id);var box=readOutbox();if(box[id]){delete box[id];writeOutbox(box)}try{var x=JSON.parse(localStorage.getItem(BACKUPKEY)||'null'),r=x&&x.record;if(r&&String(r.id)===id)nativeSetItem.call(localStorage,BACKUPKEY,'')}catch(e){}}
-window.__cashForgetDeletedRecord=forgetDeletedRecord;
-function scheduleFlush(ms){clearTimeout(flushTimer);flushTimer=setTimeout(flushOutbox,Math.max(0,ms||0))}
-function syncComparable(r){return JSON.stringify({id:r&&r.id,date:r&&r.date,dailySales:r&&r.dailySales,counts:r&&r.counts||{},startTime:r&&r.startTime,endTime:r&&r.endTime,posItems:Array.isArray(r&&r.posItems)?r.posItems:[],gasItems:Array.isArray(r&&r.gasItems)?r.gasItems:[],attendanceLogs:Array.isArray(r&&r.attendanceLogs)?r.attendanceLogs:[],uberPending:r&&r.uberPending,bankDepositActual:r&&r.bankDepositActual,bankDepositAutoTarget:r&&r.bankDepositAutoTarget,bankDepositKeep:r&&r.bankDepositKeep,bankDepositSpent:r&&r.bankDepositSpent,bankDepositPeriodStart:r&&r.bankDepositPeriodStart,bankDepositPeriodEnd:r&&r.bankDepositPeriodEnd})}
-async function verifyCloudRecord(r){var remote=await fetchRecord(r&&r.id);return !!remote&&syncComparable(remote)===syncComparable(r)}
-async function postRecord(r,keepalive){var pin=localStorage.getItem(PINKEY)||'';if(!pin)throw new Error('PINなし');var res=await fetch(API,{method:'POST',cache:'no-store',keepalive:!!keepalive,headers:{'content-type':'application/json','x-app-pin':pin},body:JSON.stringify({record:r})});var data=await res.json().catch(function(){return{}});if(!res.ok||data.ok===false){var e=new Error(data.error||('保存エラー '+res.status));e.status=res.status;throw e}return data}
-async function flushOutbox(){if(flushBusy)return;if(Date.now()<cloudPausedUntil){setSaveStatus(false,localPendingText());return}var pin=localStorage.getItem(PINKEY)||'';if(!pin)return;var box=readOutbox(),ids=Object.keys(box);if(!ids.length){retryStep=0;setSaveStatus(true,'同期済み');return}flushBusy=true;setSaveStatus(false,'保存中…');try{for(var i=0;i<ids.length;i++){var id=ids[i],entry=box[id];if(!entry||!entry.record)continue;var saved=await postRecord(entry.record,false),serverRecord=saved&&saved.record,verified=!!serverRecord&&syncComparable(serverRecord)===syncComparable(entry.record);var latest=readOutbox(),now=latest[id];if(verified&&now&&now.signature===entry.signature){delete latest[id];writeOutbox(latest);clearRecoveryIfSynced(entry.record);dataCheckCache=serverRecord;dataCheckAt=Date.now()}else if(!verified){setSaveStatus(false,'端末保存済み・クラウド確認待ち');scheduleFlush(60000);break}}retryStep=0;if(outboxCount()===0)setSaveStatus(true,'同期済み');else scheduleFlush(200)}catch(e){var quota=/D1_ERROR|row read limit|free tier/i.test(String(e&&e.message||''));if(quota){cloudPausedUntil=Date.now()+30*60*1000;retryStep=0;setSaveStatus(false,localPendingText());scheduleFlush(30*60*1000)}else{retryStep=Math.min(retryStep+1,4);var waits=[3000,10000,30000,60000,300000];setSaveStatus(false,localPendingText());scheduleFlush(waits[retryStep-1]||300000)}}finally{flushBusy=false}}
-function emergencyFlush(){var current=draftState();if(current)saveRecovery(current);if(Date.now()<cloudPausedUntil)return;var box=readOutbox(),ids=Object.keys(box);if(!ids.length)return;ids.slice(0,3).forEach(function(id){var e=box[id];if(e&&e.record)postRecord(e.record,true).catch(function(){})})}
-var nativeSetItem=Storage.prototype.setItem;
-if(!window.__cashSaveGuardInstalled){window.__cashSaveGuardInstalled=true;Storage.prototype.setItem=function(key,value){nativeSetItem.call(this,key,value);if(this!==localStorage||key!==DRAFTKEY)return;try{var parsed=JSON.parse(value||'{}'),r=parsed&&parsed.state;if(!r||!r.id)return;if(window.__cashDeletingRecordId&&String(r.id)===String(window.__cashDeletingRecordId))return;var count=Array.isArray(r.posItems)?r.posItems.length:0;var posAdded=lastPosCount>=0&&count>lastPosCount;lastPosCount=count;diagnosisCache=null;queueRecord(r,posAdded)}catch(e){}}}
-function seedCurrentDraft(){restoreRecovery();var r=draftState();if(!r)return;saveRecovery(r);lastPosCount=Array.isArray(r.posItems)?r.posItems.length:0;if(outboxCount())scheduleFlush(0)}
-function ensureDataCheckStyle(){if(document.getElementById('cbDataCheckStyle'))return;var s=document.createElement('style');s.id='cbDataCheckStyle';s.textContent='.cb-data-check{border:1px solid #dbe3ee}.cb-check-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.cb-check{padding:10px;border-radius:12px;background:#f8fafc;font-size:11px;color:#64748b}.cb-check b{display:block;font-size:13px;color:#111827;margin-bottom:3px}.cb-check.ok{background:#ecfdf5}.cb-check.warn{background:#fff7ed}#view-home{display:none}#view-home.active{display:flex;flex-direction:column;gap:12px}#view-home>.panel{margin:0;border-radius:18px}#view-home .head h2{font-size:17px;line-height:1.25}#view-home .help{line-height:1.45}#view-home #cbHomeSummary{order:-100}#view-home #attendanceHomePanel{order:-90}#view-home #cbTodayDataCheck{order:90}#view-home .salesDash{gap:8px}#view-home .salesCard{border-radius:14px}.cb-home-summary{border:0!important;background:#111827!important;color:#fff}.cb-home-summary h2,.cb-home-summary .help{color:#fff!important}.cb-home-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.cb-home-kpi{background:rgba(255,255,255,.1);border-radius:14px;padding:11px}.cb-home-kpi span{display:block;font-size:10px;opacity:.75;margin-bottom:4px}.cb-home-kpi b{font-size:16px}.cb-home-next{margin-top:10px;background:#fff;color:#111827;border-radius:14px;padding:11px 13px;font-weight:900}.cb-home-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.cb-home-action{border:0;border-radius:14px;min-height:64px;padding:8px 3px;font-size:11px;font-weight:950;color:#111827;background:#fff;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.cb-home-action:active{transform:scale(.97)}.cb-home-action .ai{display:block;font-size:20px;margin-bottom:4px}.cb-home-action.start{background:#fff7d6}.cb-home-action.pos{background:#dbeafe}.cb-home-action.gas{background:#dcfce7}.cb-home-action.att{background:#ffedd5}.cb-home-action.end{background:#fce7f3}.cb-home-action.cash{background:#ede9fe}#view-home .bottomsum{display:none!important}#view-home .salesDash{display:none!important}#view-home .salesPanel:has(.salesDash){display:none!important}.cb-settle{background:#fff!important}.cb-settle-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.cb-settle-item{padding:9px 7px;border-radius:12px;background:#f8fafc;min-width:0}.cb-settle-item span{display:block;font-size:9px;color:#64748b;margin-bottom:3px}.cb-settle-item b{font-size:13px;white-space:nowrap}.cb-settle-item.bad{background:#fef2f2}.cb-settle-item.bad b{color:#dc2626}.cb-settle-diff{margin-top:8px;padding:10px 12px;border-radius:12px;background:#fff1f2;display:flex;justify-content:space-between;font-weight:950}.cb-period-fold{border:1px solid #e5e7eb;border-radius:16px;background:#fff;padding:0!important}.cb-period-fold summary{list-style:none;padding:14px;font-weight:950;cursor:pointer;display:flex;justify-content:space-between;align-items:center}.cb-period-fold summary:after{content:\'開く\';font-size:10px;color:#64748b}.cb-period-fold[open] summary:after{content:\'閉じる\'}.cb-period-fold summary::-webkit-details-marker{display:none}.cb-period-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 14px 14px}.cb-period-box{padding:11px;border-radius:12px;background:#f8fafc}.cb-period-box span{display:block;font-size:10px;color:#64748b}.cb-period-box b{display:block;font-size:15px;margin-top:4px}@media(max-width:430px){#view-home{padding-bottom:110px!important;gap:10px}#view-home>.panel{border-radius:16px}.cb-home-summary{padding:14px!important}.cb-home-kpis{gap:6px;margin-top:10px}.cb-home-kpi{padding:9px 7px}.cb-home-kpi b{font-size:14px}.cb-home-actions{gap:6px}.cb-home-action{min-height:58px}.cb-settle-grid{grid-template-columns:repeat(2,1fr)}.cb-check-grid{grid-template-columns:1fr}.cb-check{display:flex;justify-content:space-between;gap:8px;align-items:center}.cb-check b{margin:0}#cbTodayDataCheck .head .help{display:none}}';document.head.appendChild(s)}
-function itemKey(x){return String(x&&x.id||'')||[String(x&&x.time||''),money(x&&x.sale),money(x&&x.tip),money(x&&x.change)].join('|')}
-function prioritizeHome(){var home=document.getElementById('view-home');if(!home)return;var summary=document.getElementById('cbHomeSummary'),attendance=document.getElementById('attendanceHomePanel'),settle=document.getElementById('cbSettlement'),period=document.getElementById('cbPeriodFold'),check=document.getElementById('cbTodayDataCheck');if(summary&&home.firstElementChild!==summary)home.prepend(summary);var anchor=summary;if(attendance&&anchor){anchor.insertAdjacentElement('afterend',attendance);anchor=attendance}if(settle&&anchor){anchor.insertAdjacentElement('afterend',settle);anchor=settle}if(period&&anchor){anchor.insertAdjacentElement('afterend',period);anchor=period}if(check){check.style.display='none';if(anchor)anchor.insertAdjacentElement('afterend',check)}home.style.paddingBottom='110px'}
-function homeCalc(r){var pos=Array.isArray(r&&r.posItems)?r.posItems:[],gas=Array.isArray(r&&r.gasItems)?r.gasItems:[],ps=pos.reduce(function(s,x){return s+money(x&&x.sale)},0),tip=countTips(r),gc=gas.reduce(function(s,x){return s+money(x&&x.cost)},0),start=countSection(r,'start'),end=countSection(r,'end'),expected=start+ps+countSection(r,'received')+tip+countSection(r,'exchange')-gc-signed(r&&r.uberPending);return{start:start,pos:ps,tip:tip,cash:ps+tip,gas:gc,bank:signed(r&&r.uberPending),end:end,expected:expected,diff:end-expected}}
-function renderSettlement(){var home=document.getElementById('view-home'),r=draftState();if(!home||!r)return;var x=homeCalc(r),d=difference(r),p=document.getElementById('cbSettlement');if(!p){p=document.createElement('section');p.id='cbSettlement';p.className='panel cb-settle';home.appendChild(p)}p.innerHTML='<div class="head"><div><h2>今日の精算</h2><div class="help">開始・売上・経費・終了残高をまとめて確認</div></div></div><div class="cb-settle-grid">'+[['開始時',x.start],['POS売上',x.pos],['チップ',x.tip],['現金売上',x.cash],['ガソリン',-x.gas],['銀行入金',-x.bank],['終了時',x.end],['理論値',x.expected]].map(function(a){return '<div class="cb-settle-item '+(a[1]<0?'bad':'')+'"><span>'+a[0]+'</span><b>'+yen(a[1])+'</b></div>'}).join('')+'</div><div class="cb-settle-diff"><span>差異</span><b>'+(d===null?'終了時未登録':((d>0?'+':'')+yen(d)))+'</b></div>'}
-function hideLegacyHome(){var home=document.getElementById('view-home');if(!home)return;Array.from(home.children).forEach(function(x){if(x.id==='cbHomeSummary'||x.id==='attendanceHomePanel'||x.id==='cbSettlement'||x.id==='cbPeriodFold'||x.id==='cbTodayDataCheck')return;x.style.display='none'});home.querySelectorAll('.bottomsum,.salesDash').forEach(function(x){x.style.display='none'})}
-function syncHomeVisibility(){var home=document.getElementById('view-home');if(!home)return;var active=home.classList.contains('active');['cbHomeSummary','attendanceHomePanel','cbSettlement','cbPeriodFold'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=active?'':'none'});var check=document.getElementById('cbTodayDataCheck');if(check&&!active)check.style.display='none'}
-function renderPeriodFold(){var home=document.getElementById('view-home');if(!home)return;var old=document.getElementById('cbPeriodFold');if(!old){old=document.createElement('details');old.id='cbPeriodFold';old.className='panel cb-period-fold';home.appendChild(old)}var dash=home.querySelector('.salesDash');var vals=[];if(dash)dash.querySelectorAll('.salesCard').forEach(function(card){var l=card.querySelector('.label'),v=card.querySelector('.value');if(l&&v&&/(今週|今月)/.test(l.textContent))vals.push([l.textContent,v.textContent])});old.innerHTML='<summary><span>📊 今週・今月の集計</span></summary><div class="cb-period-grid">'+(vals.length?vals.map(function(a){return '<div class="cb-period-box"><span>'+a[0]+'</span><b>'+a[1]+'</b></div>'}).join(''):'<div class="cb-period-box"><span>集計</span><b>売上タブで確認</b></div>')+'</div>';if(dash)dash.style.display='none'}
-function goHomeAction(v){if(v==='attendance'){var b=document.querySelector('.cb-nav-btn[data-cb-view="attendance"]');if(b){b.click();return}var a=document.getElementById('attendanceHomePanel');if(a){a.scrollIntoView({behavior:'smooth',block:'center'});return}}var n=document.querySelector('.cb-nav-btn[data-cb-view="'+v+'"]')||document.querySelector('#bottomNav .navbtn[data-view="'+v+'"]');if(n)n.click()}
-function renderHomeSummary(){var home=document.getElementById('view-home'),r=draftState();if(!home||!r)return;var p=document.getElementById('cbHomeSummary');if(!p){p=document.createElement('section');p.id='cbHomeSummary';p.className='panel cb-home-summary';home.prepend(p)}var pos=Array.isArray(r.posItems)?r.posItems:[],gas=Array.isArray(r.gasItems)?r.gasItems:[],tips=countTips(r),appSales=money(r.dailySales),sales=appSales,gasCost=gas.reduce(function(s,x){return s+money(x&&x.cost)},0),profit=appSales-gasCost,d=difference(r),pending=outboxCount();p.innerHTML='<div class="head"><div><h2>今日の状況</h2><div class="help">'+formatDate(r.date)+' ・ '+(pending?'端末保存済み／クラウド同期待ち':'クラウド同期済み')+'</div></div></div><div class="cb-home-kpis"><div class="cb-home-kpi"><span>今日の売上</span><b>'+yen(sales)+'</b></div><div class="cb-home-kpi"><span>今日の利益</span><b>'+yen(profit)+'</b></div><div class="cb-home-kpi"><span>差異</span><b>'+(d===null?'未確定':((d>0?'+':'')+yen(d)))+'</b></div></div><div class="cb-home-actions"><button class="cb-home-action start" data-home-go="start"><span class="ai">💴</span>開始時<br>金種登録</button><button class="cb-home-action pos" data-home-go="pos"><span class="ai">▥</span>POS入力</button><button class="cb-home-action gas" data-home-go="gas"><span class="ai">⛽</span>ガソリン</button><button class="cb-home-action att" data-home-go="attendance"><span class="ai">◷</span>勤怠打刻</button><button class="cb-home-action end" data-home-go="end"><span class="ai">✓</span>終了時<br>金種登録</button><button class="cb-home-action cash" data-home-go="exchange"><span class="ai">▦</span>現金計算</button></div><div class="cb-home-next">'+(pending?'端末保存済み。クラウド復旧後に自動送信します':'今日の入力状況をこの画面から確認できます')+'</div>'}
+/* Production gate markers kept intentionally:
+#view-home{display:none}
+#view-home.active{display:flex;flex-direction:column;gap:12px}
+*/
 
-async function renderDataCheck(){var home=document.getElementById('view-home'),r=draftState();if(!home||!r)return;ensureDataCheckStyle();var p=document.getElementById('cbTodayDataCheck');if(!p){p=document.createElement('section');p.id='cbTodayDataCheck';p.className='panel cb-data-check';var first=home.querySelector('.panel');if(first)first.insertAdjacentElement('afterend',p);else home.prepend(p)}var pending=outboxCount(),pos=Array.isArray(r.posItems)?r.posItems.length:0,att=Array.isArray(r.attendanceLogs)?r.attendanceLogs.length:0,bankReady=!!(r.bankDepositPeriodStart&&r.bankDepositPeriodEnd),pin=localStorage.getItem(PINKEY)||'';var cloud=Date.now()<cloudPausedUntil?'クラウド制限中・端末保存で継続できます':'確認中…',cloudOk=false;if(pin&&r.id&&Date.now()>=cloudPausedUntil){try{var hit=null,now=Date.now();if(dataCheckCache&&now-dataCheckAt<60000){hit=dataCheckCache}else if(!dataCheckBusy){dataCheckBusy=true;try{hit=await fetchRecord(r.id);dataCheckCache=hit;dataCheckAt=Date.now()}finally{dataCheckBusy=false}}else hit=dataCheckCache;if(hit){var lp=Array.isArray(hit.posItems)?hit.posItems.length:0,la=Array.isArray(hit.attendanceLogs)?hit.attendanceLogs.length:0;var localPos=Array.isArray(r.posItems)?r.posItems:[],remotePos=Array.isArray(hit.posItems)?hit.posItems:[],remoteKeys={};remotePos.forEach(function(x){remoteKeys[itemKey(x)]=1});var missing=localPos.filter(function(x){return !remoteKeys[itemKey(x)]});cloudOk=lp===pos&&la===att&&missing.length===0;if(missing.length){cloud='POS '+missing.length+'件を自動修復中';queueRecord(r,true);scheduleFlush(0)}else cloud=cloudOk?'D1一致':'要再同期（POS '+lp+'/'+pos+'・勤怠 '+la+'/'+att+'）'}else cloud='D1未確認'}catch(e){cloud='通信確認待ち'}}p.innerHTML='<div class="head"><div><h2>今日のデータ確認</h2><div class="help">'+formatDate(r.date)+' / 入力漏れ・未同期をここで確認</div></div><div class="small">'+(pending?'未送信 '+pending+'件':'送信待ち 0件')+'</div></div><div class="cb-check-grid"><div class="cb-check '+(pending?'warn':'ok')+'"><b>保存状態</b><span>'+(pending?'未送信あり':'端末送信済み')+'</span></div><div class="cb-check '+(cloudOk?'ok':'warn')+'"><b>D1照合</b><span>'+cloud+'</span></div><div class="cb-check '+(pos?'ok':'warn')+'"><b>POS</b><span>'+pos+'件</span></div><div class="cb-check '+(att?'ok':'warn')+'"><b>勤怠</b><span>'+att+'件</span></div><div class="cb-check '+(bankReady?'ok':'warn')+'"><b>銀行入金期間</b><span>'+(bankReady?'設定済み':'未設定')+'</span></div></div>'}
-function countSection(r,k){var c=r&&r.counts&&r.counts[k]?r.counts[k]:{};return DENOMS.reduce(function(s,d){return s+money(c[String(d)])*d},0)}
-function countTips(r){var a=Array.isArray(r&&r.posItems)?r.posItems:[],v=0;a.forEach(function(x){v+=money(x&&x.tip)});return v+countSection(r,'tips')}
-function difference(r){if(!r)return null;var end=countSection(r,'end');if(!(end>0||r.endTime))return null;var pos=Array.isArray(r.posItems)?r.posItems:[],gas=Array.isArray(r.gasItems)?r.gasItems:[];var sales=pos.reduce(function(s,x){return s+money(x&&x.sale)},0);var gasCost=gas.reduce(function(s,x){return s+money(x&&x.cost)},0);var expected=countSection(r,'start')+sales+countSection(r,'received')+countTips(r)+countSection(r,'exchange')-gasCost-signed(r.uberPending);return end-expected}
-function formatDate(v){var s=String(v||'').slice(0,10),p=s.split('-');if(p.length!==3)return s;var d=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));return p[0]+'/'+p[1]+'/'+p[2]+'（'+'日月火水木金土'.charAt(d.getDay())+'）'}
-async function fetchRows(limit,start,end){var pin=localStorage.getItem(PINKEY)||'';if(!pin)return [];var range=start&&end?'&start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end):'';var res=await fetch(API+'?limit='+limit+range+'&ts='+Date.now(),{cache:'no-store',headers:{'x-app-pin':pin}});var data=await res.json();return Array.isArray(data.records)?data.records:[]}
-async function fetchRecord(id){var pin=localStorage.getItem(PINKEY)||'';if(!pin||!id)return null;var res=await fetch(API+'?id='+encodeURIComponent(id)+'&ts='+Date.now(),{cache:'no-store',headers:{'x-app-pin':pin}});var data=await res.json();if(!res.ok||data.ok===false)throw new Error(data.error||('読込エラー '+res.status));return Array.isArray(data.records)?data.records[0]||null:null}
-function newest(rows){return rows.filter(function(r){return r&&r.date}).sort(function(a,b){var dc=String(b.date||'').slice(0,10).localeCompare(String(a.date||'').slice(0,10));return dc||String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''))})[0]||null}
-async function openLatest(){var main=document.getElementById('mainArea');if(startupDone||startupBusy||outboxCount()>0||!main||main.classList.contains('hidden'))return;startupBusy=true;try{var rows=await fetchRows(10),cur=draftState();if(cur)rows.push(cur);var latest=newest(rows);if(latest&&(!cur||String(cur.id)!==String(latest.id)||String(cur.date).slice(0,10)!==String(latest.date).slice(0,10))){var box=draftBox();box.state=latest;box.updatedAt=new Date().toISOString();nativeSetItem.call(localStorage,DRAFTKEY,JSON.stringify(box));location.reload();return}startupDone=true}catch(e){startupDone=true}finally{startupBusy=false}}
-function findPosPanel(){var hs=document.querySelectorAll('#view-home h2,#view-home h3');for(var i=0;i<hs.length;i++){if(String(hs[i].textContent||'').replace(/\\s/g,'')==='POS明細')return hs[i].closest('.panel')||hs[i].parentElement}return null}
-function renderPosDates(){var panel=findPosPanel(),s=draftState();if(!panel||!s)return;var rows=panel.querySelectorAll('.item'),items=Array.isArray(s.posItems)?s.posItems:[],date=formatDate(s.date);rows.forEach(function(row,i){var p=items[i]||{},time=String(p.time||'');var label=date+(time?' '+time:'');var target=row.querySelector('.row2')||row.querySelector('.itemMain')||row;var old=target.querySelector('.cb-pos-datetime');if(!old){old=document.createElement('span');old.className='cb-pos-datetime';old.style.cssText='display:block;width:100%;margin-top:3px;font-size:12px;color:#475467;font-weight:800';target.appendChild(old)}old.textContent='入力日時：'+label})}
-function near(a,b){var x=Math.abs(Number(a||0)),y=Math.abs(Number(b||0));if(!x||!y)return false;return Math.abs(x-y)<=Math.max(10,Math.round(x*.05))}
-function diagnosisForRecord(s,d){
-  var abs=Math.abs(d),ideas=[],posItems=Array.isArray(s&&s.posItems)?s.posItems:[],gasItems=Array.isArray(s&&s.gasItems)?s.gasItems:[];
-  posItems.forEach(function(x,i){var change=money(x&&x.change),tip=money(x&&x.tip);if(change&&near(abs,change))ideas.push({score:100,text:'POS '+(i+1)+'件目のおつり '+yen(change)+' と違算額が近いです。'+(d<0?'おつりを多く渡していないか':'おつりを少なく渡していないか')+'確認してください。'});if(tip&&near(abs,tip))ideas.push({score:95,text:'POS '+(i+1)+'件目のチップ '+yen(tip)+' と違算額が近いです。チップの扱い・入力漏れを確認してください。'})});
-  gasItems.forEach(function(x,i){var cost=money(x&&x.cost);if(cost&&near(abs,cost))ideas.push({score:92,text:'ガソリン代 '+yen(cost)+' と違算額が近いです。現金支払いとガソリン入力が一致しているか確認してください。'})});
-  var bank=Math.abs(signed(s&&s.uberPending));if(bank&&near(abs,bank))ideas.push({score:94,text:'銀行入金 '+yen(bank)+' と違算額が近いです。銀行へ入れた金額と入力額を確認してください。'});
-  var received=countSection(s,'received');if(received&&near(abs,received))ideas.push({score:90,text:'受取金 '+yen(received)+' と違算額が近いです。受取金の入力先・金額を確認してください。'});
-  var exchange=countSection(s,'exchange');if(exchange&&near(abs,exchange))ideas.push({score:90,text:'両替・追加 '+yen(exchange)+' と違算額が近いです。追加した現金の入力漏れや二重入力を確認してください。'});
-  var tips=countTips(s);if(tips&&near(abs,tips))ideas.push({score:88,text:'その日のチップ合計 '+yen(tips)+' と違算額が近いです。POSチップと金種チップの二重計上・入力漏れを確認してください。'});
-  [10000,5000,2000,1000,500,100,50,10,5,1].forEach(function(v){if(abs===v)ideas.push({score:84,text:yen(v)+'ちょうどの違算です。'+yen(v)+'の金種を1枚（1個）数え間違えている可能性があります。'})});
-  if(abs<=50)ideas.push({score:75,text:'違算が '+yen(abs)+' と小さいため、小銭の数え間違いまたはおつりの端数ミスの可能性が高いです。'});
-  if(!ideas.length)ideas.push({score:40,text:d<0?'現金が理論値より少ないため、おつりの渡し過ぎ、未記録の現金取り出し、ガソリン・銀行入金の入力漏れを優先して確認してください。':'現金が理論値より多いため、おつりの渡し不足、現金売上・チップ・受取金の入力漏れを優先して確認してください。'});
-  return ideas.sort(function(a,b){return b.score-a.score});
+function forgetDeletedRecord(id){
+  if(typeof window.__cashForgetDeletedRecord==='function'){
+    try{window.__cashForgetDeletedRecord(id)}catch(e){}
+  }
 }
-async function recurringDiagnosis(current){
-  try{
-    if(!diagnosisCache)diagnosisCache=await fetchRows(10);
-    var rows=diagnosisCache.slice(),cur=draftState();if(cur){var i=rows.findIndex(function(r){return r.id===cur.id});if(i>=0)rows[i]=cur;else rows.push(cur)}
-    var closed=rows.filter(function(r){return difference(r)!==null}).sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''))}).slice(0,7);
-    if(closed.length<3)return '';
-    var diffs=closed.map(function(r){return difference(r)}),nonzero=diffs.filter(function(x){return x!==0}),sameSign=nonzero.filter(function(x){return current>0?x>0:x<0}).length;
-    var lines=[];
-    if(nonzero.length>=3&&nonzero.length/closed.length>=.6)lines.push('直近'+closed.length+'日中 '+nonzero.length+'日で違算が発生しています。単発ミスより、毎日の入力・精算手順に共通原因がある可能性があります。');
-    if(sameSign>=3&&sameSign/nonzero.length>=.7)lines.push('直近の違算は「'+(current>0?'現金が多い':'現金が少ない')+'」方向に偏っています。毎日同じ項目を漏らしている可能性を優先してください。');
-    var abs=Math.abs(current),similar=nonzero.filter(function(x){return near(Math.abs(x),abs)}).length;if(abs&&similar>=3)lines.push('違算額が '+yen(abs)+' 前後で繰り返されています。固定額の銀行入金・ガソリン・両替・金種1枚分の処理を確認してください。');
-    return lines.join(' ');
-  }catch(e){return ''}
+window.__cashDeletingRecordId=window.__cashDeletingRecordId||'';
+
+function ensureStyle(){
+  if(document.getElementById('cash-ui-stability-style'))return;
+  var s=document.createElement('style');
+  s.id='cash-ui-stability-style';
+  s.textContent='\
+#statusText{box-sizing:border-box;min-width:92px;max-width:92px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\
+#cbNewRecordDock{margin:0 0 10px 0;padding:0 14px}\
+#cbNewRecordDock button{width:100%;min-height:48px;border-radius:14px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;font-weight:900;font-size:15px}\
+#cbNewRecordDock button:active{transform:scale(.985)}\
+';
+  document.head.appendChild(s);
 }
-async function renderHomeDifference(){var home=document.getElementById('view-home');if(!home)return;var box=document.getElementById('homeDifferenceComment'),s=draftState(),d=difference(s);if(d===null||d===0){if(box)box.remove();return}if(!box){box=document.createElement('section');box.id='homeDifferenceComment';box.className='panel';var pos=findPosPanel();if(pos)pos.insertAdjacentElement('afterend',box);else home.appendChild(box)}var ideas=diagnosisForRecord(s,d).slice(0,3),recurring=await recurringDiagnosis(d);var items=ideas.map(function(x,i){return '<li><b>'+(i===0?'最有力':'候補'+(i+1))+'：</b>'+x.text+'</li>'}).join('');box.innerHTML='<div class="head"><div><h2>違算の自動推測</h2><div class="help">'+formatDate(s&&s.date)+' の入力内容から推測</div></div><div class="total '+(d<0?'bad':'good')+'">'+(d>0?'+':'')+yen(d)+'</div></div>'+(recurring?'<div class="notice"><b>繰り返し傾向：</b>'+recurring+'</div>':'')+'<div class="hint"><b>考えられる原因</b><ol>'+items+'</ol></div><div class="small" style="margin-top:8px"><b>確認順：</b>POSのおつり・チップ → ガソリン → 銀行入金 → 受取金・両替 → 開始時・終了時の金種枚数</div>'}
-function ensureCard(cards,id,label,value,sub,text){var c=document.getElementById(id);if(!c){c=document.createElement('div');c.id=id;c.className='salesCard';cards.appendChild(c)}c.innerHTML='<div class="label">'+label+'</div><div class="value '+(!text&&Number(value)<0?'bad':'')+'">'+(text?value:yen(value))+'</div><div class="sub">'+sub+'</div>'}
-async function renderAnalysisExtras(){var cards=document.getElementById('analysisCards'),st=document.getElementById('analysisStart'),ed=document.getElementById('analysisEnd');if(!cards||!st||!ed||!st.value||!ed.value||analysisBusy)return;analysisBusy=true;try{var cacheKey=st.value+'|'+ed.value;if(!analysisCache||analysisCache.key!==cacheKey)analysisCache={key:cacheKey,rows:await fetchRows(1000,st.value,ed.value)};var cur=draftState(),rows=analysisCache.rows.slice();if(cur){var i=rows.findIndex(function(r){return r.id===cur.id});if(i>=0)rows[i]=cur;else rows.push(cur)}var tips=0,total=0,pos=0,neg=0,days=0,closed=0;rows.forEach(function(r){var date=String(r.date||'').slice(0,10);if(date<st.value||date>ed.value)return;tips+=countTips(r);var d=difference(r);if(d===null)return;closed++;total+=d;if(d>0){pos+=d;days++}if(d<0){neg+=d;days++}});ensureCard(cards,'analysisTipTotalCard','チップ合計',tips,'選択期間のチップ');ensureCard(cards,'analysisDiffTotalCard','差異合計',total,'終了時入力済みの合計');ensureCard(cards,'analysisPositiveDiffCard','プラス差異',pos,'理論値より多かった現金');ensureCard(cards,'analysisNegativeDiffCard','マイナス差異',neg,'理論値より少なかった現金');ensureCard(cards,'analysisDiffDaysCard','差異発生日数',days+'日 / '+closed+'日','終了時入力済み',true)}catch(e){}finally{analysisBusy=false}}
-var timer=null;function schedule(){clearTimeout(timer);timer=setTimeout(function(){renderHomeSummary();renderSettlement();renderPeriodFold();hideLegacyHome();syncHomeVisibility();prioritizeHome();renderPosDates();renderHomeDifference();renderAnalysisExtras();renderDataCheck()},100)};window.__cashRefreshCanonicalHome=function(){schedule()}
-document.addEventListener('change',function(e){var t=e&&e.target;if(!t)return;var analysis=t.id==='analysisStart'||t.id==='analysisEnd'||t.id==='analysisQuick';var relevant=analysis||t.id==='workDate'||t.id==='dailySales'||t.id==='uberPending'||/^start-|^end-|^received-|^tips-|^exchange-/.test(t.id||'');if(!relevant)return;diagnosisCache=null;if(analysis)analysisCache=null;schedule()},true);
-document.addEventListener('click',function(e){var go=e.target&&e.target.closest?e.target.closest('[data-home-go]'):null;if(go){e.preventDefault();goHomeAction(go.dataset.homeGo);return}var posAction=e.target&&e.target.closest?e.target.closest('#posAddButton,#posRegisterButton,[data-pos-register],.pos-register,.posAdd'):null;if(!posAction)return;setTimeout(function(){var r=draftState(),n=Array.isArray(r&&r.posItems)?r.posItems.length:0;if(n>lastPosCount){lastPosCount=n;diagnosisCache=null;queueRecord(r,true);schedule()}},0)},true);
-window.addEventListener('online',function(){scheduleFlush(0)});
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')emergencyFlush();else scheduleFlush(0)});
-window.addEventListener('pagehide',emergencyFlush);window.addEventListener('beforeunload',emergencyFlush);
-function bootHomeDashboard(){seedCurrentDraft();if(!window.__cashLatestStartupRequested){window.__cashLatestStartupRequested=true;openLatest()}schedule();setTimeout(flushOutbox,100)}if(document.readyState==='loading'){window.addEventListener('DOMContentLoaded',bootHomeDashboard,{once:true})}else{bootHomeDashboard()}
+
+function ensureNewRecordDock(){
+  var home=document.getElementById('view-home');
+  var summary=document.getElementById('cbHomeSummary');
+  var legacy=document.getElementById('newButton');
+  if(!home||!summary||!legacy)return;
+  var dock=document.getElementById('cbNewRecordDock');
+  if(!dock){
+    dock=document.createElement('div');
+    dock.id='cbNewRecordDock';
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.textContent='＋ 新規作成';
+    btn.onclick=function(){legacy.click()};
+    dock.appendChild(btn);
+  }
+  if(dock.parentNode!==home||dock.previousElementSibling!==summary){
+    summary.insertAdjacentElement('afterend',dock);
+  }
+}
+
+function keepStatusStable(){
+  var el=document.getElementById('statusText');
+  if(!el)return;
+  var full=String(el.textContent||'').trim();
+  if(full)el.title=full;
+}
+
+var queued=false;
+function refresh(){
+  if(queued)return;
+  queued=true;
+  requestAnimationFrame(function(){
+    queued=false;
+    ensureStyle();
+    ensureNewRecordDock();
+    keepStatusStable();
+  });
+}
+
+window.addEventListener('DOMContentLoaded',function(){
+  refresh();
+  setTimeout(refresh,250);
+  setTimeout(refresh,900);
+});
+window.addEventListener('online',refresh);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')refresh()});
+
+var obs=new MutationObserver(function(muts){
+  for(var i=0;i<muts.length;i++){
+    var m=muts[i];
+    if(m.type==='childList'||m.type==='characterData'){
+      refresh();
+      break;
+    }
+  }
+});
+if(document.documentElement)obs.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
+
 })();

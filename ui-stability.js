@@ -24,9 +24,11 @@ function ensureStyle(){
 #cb-custom-nav .cb-custom-nav-grid{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:4px!important}\
 #cb-custom-nav .cb-nav-btn{min-width:0!important;padding:6px 1px!important;font-size:9px!important;min-height:48px!important}\
 .bottomsum{display:none!important}\
-body.pos-active #cb-menu-button{display:none!important}\
+#cb-menu-button{top:auto!important;bottom:calc(88px + env(safe-area-inset-bottom,0px))!important;left:auto!important;right:12px!important}\
+#cb-menu-panel{top:auto!important;bottom:calc(140px + env(safe-area-inset-bottom,0px))!important;left:auto!important;right:12px!important}\
+body.pos-active #cb-menu-button,body.pos-active #cb-menu-panel{display:none!important}\
 body.pos-active .posbox,body.pos-active #view-pos{padding-bottom:calc(92px + env(safe-area-inset-bottom,0px))!important}\
-@media(max-width:430px){#cb-custom-nav{padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px))!important}#cb-custom-nav .cb-nav-btn{font-size:8.5px!important;border-radius:12px!important}#cb-custom-nav .cb-nav-btn .ico{font-size:15px!important;margin-bottom:3px!important}}';
+@media(max-width:430px){#cb-custom-nav{padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px))!important}#cb-custom-nav .cb-nav-btn{font-size:8.5px!important;border-radius:12px!important}#cb-custom-nav .cb-nav-btn .ico{font-size:15px!important;margin-bottom:3px!important}#cb-menu-button{width:40px!important;height:40px!important;border-radius:13px!important;font-size:20px!important}}';
   (document.head||document.documentElement).appendChild(st);
 }
 
@@ -88,16 +90,6 @@ function openNative(v){
   return true;
 }
 
-function route(v){
-  if(v==='attendance')return openAttendance();
-  if(v==='analysis'){
-    var existing=document.querySelector('#cb-custom-nav .cb-nav-btn[data-cb-view="analysis"]');
-    if(existing&&typeof existing.__cbOriginalClick==='function'){existing.__cbOriginalClick();return true}
-    return false;
-  }
-  return openNative(v);
-}
-
 function bindCanonicalClicks(){
   var nav=document.getElementById('cb-custom-nav');
   if(!nav||nav.dataset.cbStableBound==='1')return;
@@ -108,30 +100,21 @@ function bindCanonicalClicks(){
     var v=b.dataset.cbView;
     if(v==='analysis'){
       setTimeout(syncActive,0);
+      setTimeout(syncActive,100);
       return;
     }
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    route(v);
+    if(v==='attendance')openAttendance();else openNative(v);
     setTimeout(syncActive,0);
     setTimeout(syncActive,100);
   },true);
 }
 
-function rememberAnalysisHandler(){
-  var b=document.querySelector('#cb-custom-nav .cb-nav-btn[data-cb-view="analysis"]');
-  if(!b||b.__cbOriginalClick)return;
-  var nav=document.getElementById('cb-custom-nav');
-  if(nav&&typeof nav.onclick==='function'){
-    b.__cbOriginalClick=function(){nav.onclick({target:b})};
-  }
-}
-
 function stabilize(){
   ensureStyle();
   if(!ensureCanonicalNav())return;
-  rememberAnalysisHandler();
   bindCanonicalClicks();
   syncActive();
 }

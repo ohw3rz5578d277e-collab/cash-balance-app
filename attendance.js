@@ -2,7 +2,7 @@
 'use strict';
 if(window.__cashAttendanceBundleLoaded)return;
 window.__cashAttendanceBundleLoaded=true;
-var v='20261017-navroot1';
+var v='20261017-homestable1';
 var ORDER=[
   ['home','⌂','ホーム'],
   ['start','💴','開始時'],
@@ -28,6 +28,12 @@ function bind(){var nav=ensureSevenButtons();if(!nav)return;if(nav.dataset.cbCan
 function removeOldRescue(){var r=document.getElementById('cb-pos-rescue-nav');if(r)r.remove();var s=document.getElementById('cb-navigation-rescue-style');if(s)s.remove();if(document.body)document.body.classList.remove('cb-pos-rescue-visible')}
 function stabilize(){ensureStyle();removeOldRescue();bind()}
 function watchNavigation(){stabilize();setTimeout(stabilize,100);setTimeout(stabilize,400);setTimeout(stabilize,1000);document.addEventListener('click',function(){setTimeout(stabilize,0)},true);if(document.body&&window.MutationObserver){new MutationObserver(function(){setTimeout(stabilize,0)}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']})}}
-function startModules(){add('/attendance-core.js?v='+v,function(){add('/history-manager.js?v='+v,function(){add('/attendance-history.js?v='+v,function(){stabilize()})})})}
-if(document.readyState==='loading'){document.write('<script src="/attendance-core.js?v='+v+'"><\/script>');document.write('<script src="/history-manager.js?v='+v+'"><\/script>');document.write('<script src="/attendance-history.js?v='+v+'"><\/script>');document.addEventListener('DOMContentLoaded',watchNavigation,{once:true})}else{startModules();watchNavigation()}
+function startModules(){add('/attendance-core.js?v='+v,function(){add('/history-manager.js?v='+v,function(){add('/attendance-history.js?v='+v,function(){add('/ui-stability.js?v='+v,function(){stabilize()})})})})}
+if(document.readyState==='loading'){
+  document.write('<script src="/attendance-core.js?v='+v+'"><\/script>');
+  document.write('<script src="/history-manager.js?v='+v+'"><\/script>');
+  document.write('<script src="/attendance-history.js?v='+v+'"><\/script>');
+  document.write('<script src="/ui-stability.js?v='+v+'"><\/script>');
+  document.addEventListener('DOMContentLoaded',watchNavigation,{once:true})
+}else{startModules();watchNavigation()}
 })();

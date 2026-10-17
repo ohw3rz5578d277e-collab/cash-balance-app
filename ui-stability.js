@@ -1,0 +1,151 @@
+(function(){
+'use strict';
+if(window.__cashUiStabilityLoaded)return;
+window.__cashUiStabilityLoaded=true;
+
+var ORDER=[
+  ['home','⌂','ホーム'],
+  ['start','💴','開始時'],
+  ['pos','🧾','POS'],
+  ['sales','📊','売上'],
+  ['end','✓','終了時'],
+  ['attendance','⏱','勤怠'],
+  ['analysis','▥','分析']
+];
+
+function ensureStyle(){
+  var old=document.getElementById('cb-ui-stability-style');
+  if(old)return;
+  var st=document.createElement('style');
+  st.id='cb-ui-stability-style';
+  st.textContent='\
+#cb-pos-rescue-nav{display:none!important}\
+#cb-custom-nav,.cb-custom-nav{display:block!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;position:fixed!important;left:50%!important;right:auto!important;bottom:0!important;transform:translateX(-50%)!important;width:min(1100px,100%)!important;height:auto!important;overflow:visible!important;z-index:2147483000!important;box-sizing:border-box!important}\
+#cb-custom-nav .cb-custom-nav-grid{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:4px!important}\
+#cb-custom-nav .cb-nav-btn{min-width:0!important;padding:6px 1px!important;font-size:9px!important;min-height:48px!important}\
+.bottomsum{display:none!important}\
+body.pos-active #cb-menu-button{display:none!important}\
+body.pos-active .posbox,body.pos-active #view-pos{padding-bottom:calc(92px + env(safe-area-inset-bottom,0px))!important}\
+@media(max-width:430px){#cb-custom-nav{padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px))!important}#cb-custom-nav .cb-nav-btn{font-size:8.5px!important;border-radius:12px!important}#cb-custom-nav .cb-nav-btn .ico{font-size:15px!important;margin-bottom:3px!important}}';
+  (document.head||document.documentElement).appendChild(st);
+}
+
+function removeRescue(){
+  var r=document.getElementById('cb-pos-rescue-nav');if(r)r.remove();
+  var s=document.getElementById('cb-navigation-rescue-style');if(s)s.remove();
+  if(document.body)document.body.classList.remove('cb-pos-rescue-visible');
+}
+
+function buttonHtml(v,ico,label){
+  return '<button type="button" class="cb-nav-btn" data-cb-view="'+v+'"><span class="ico">'+ico+'</span>'+label+'</button>';
+}
+
+function ensureCanonicalNav(){
+  removeRescue();
+  var nav=document.getElementById('cb-custom-nav');
+  if(!nav)return false;
+  var grid=nav.querySelector('.cb-custom-nav-grid');
+  if(!grid)return false;
+  var needs=ORDER.some(function(x){return !grid.querySelector('[data-cb-view="'+x[0]+'"]')});
+  if(needs||grid.querySelectorAll('.cb-nav-btn').length!==ORDER.length){
+    grid.innerHTML=ORDER.map(function(x){return buttonHtml(x[0],x[1],x[2])}).join('');
+  }
+  grid.style.setProperty('grid-template-columns','repeat(7,minmax(0,1fr))','important');
+  return true;
+}
+
+function actualView(){
+  if(document.body&&document.body.classList.contains('pos-active'))return 'pos';
+  var a=document.querySelector('.view.active');
+  if(a&&a.id&&a.id.indexOf('view-')===0)return a.id.slice(5);
+  return 'home';
+}
+
+function syncActive(){
+  var v=actualView();
+  document.querySelectorAll('#cb-custom-nav .cb-nav-btn').forEach(function(b){
+    b.classList.toggle('active',b.dataset.cbView===v);
+  });
+}
+
+function openAttendance(){
+  var detail=document.getElementById('attDetail');
+  if(detail){detail.click();return true}
+  var view=document.getElementById('view-attendance');
+  if(view){
+    document.querySelectorAll('.view').forEach(function(x){x.classList.remove('active')});
+    view.classList.add('active');
+    if(document.body)document.body.classList.remove('pos-active');
+    return true;
+  }
+  return false;
+}
+
+function openNative(v){
+  var b=document.querySelector('#bottomNav .navbtn[data-view="'+v+'"]');
+  if(!b)return false;
+  b.click();
+  return true;
+}
+
+function route(v){
+  if(v==='attendance')return openAttendance();
+  if(v==='analysis'){
+    var existing=document.querySelector('#cb-custom-nav .cb-nav-btn[data-cb-view="analysis"]');
+    if(existing&&typeof existing.__cbOriginalClick==='function'){existing.__cbOriginalClick();return true}
+    return false;
+  }
+  return openNative(v);
+}
+
+function bindCanonicalClicks(){
+  var nav=document.getElementById('cb-custom-nav');
+  if(!nav||nav.dataset.cbStableBound==='1')return;
+  nav.dataset.cbStableBound='1';
+  nav.addEventListener('click',function(e){
+    var b=e.target&&e.target.closest?e.target.closest('.cb-nav-btn[data-cb-view]'):null;
+    if(!b)return;
+    var v=b.dataset.cbView;
+    if(v==='analysis'){
+      setTimeout(syncActive,0);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    route(v);
+    setTimeout(syncActive,0);
+    setTimeout(syncActive,100);
+  },true);
+}
+
+function rememberAnalysisHandler(){
+  var b=document.querySelector('#cb-custom-nav .cb-nav-btn[data-cb-view="analysis"]');
+  if(!b||b.__cbOriginalClick)return;
+  var nav=document.getElementById('cb-custom-nav');
+  if(nav&&typeof nav.onclick==='function'){
+    b.__cbOriginalClick=function(){nav.onclick({target:b})};
+  }
+}
+
+function stabilize(){
+  ensureStyle();
+  if(!ensureCanonicalNav())return;
+  rememberAnalysisHandler();
+  bindCanonicalClicks();
+  syncActive();
+}
+
+function boot(){
+  stabilize();
+  setTimeout(stabilize,100);
+  setTimeout(stabilize,500);
+  setTimeout(stabilize,1200);
+  document.addEventListener('click',function(){setTimeout(stabilize,0)},true);
+  if(window.MutationObserver&&document.body){
+    new MutationObserver(function(){setTimeout(stabilize,0)}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+  }
+}
+
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();

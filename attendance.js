@@ -2,7 +2,7 @@
 'use strict';
 if(window.__cashAttendanceBundleLoaded)return;
 window.__cashAttendanceBundleLoaded=true;
-var v='20261017-historyedit1';
+var v='20261017-historyrange1';
 
 function ensureNavigationRescueStyle(){
   if(document.getElementById('cb-navigation-rescue-style'))return;

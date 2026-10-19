@@ -6,7 +6,7 @@ window.__cashAttendanceBundleLoaded=true;
 // Attendance bundle loader only.
 // Navigation belongs to the main UI runtime; attendance-core only adds the
 // attendance destination when it is not already present.
-var v='20261017-cleanup1';
+var v='20261019-attfix2';
 
 function add(src,next){
   var s=document.createElement('script');

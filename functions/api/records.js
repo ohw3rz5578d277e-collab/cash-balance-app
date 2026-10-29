@@ -61,7 +61,7 @@ function itemKey(item) {
   ].join("|");
 }
 
-function mergeConcurrentItems(serverItems, incomingItems, clientUpdatedAt) {
+function mergeConcurrentItems(serverItems, incomingItems, clientUpdatedAt, preserveServerMatches) {
   const server = Array.isArray(serverItems) ? serverItems : [];
   const incoming = Array.isArray(incomingItems) ? incomingItems : [];
   const incomingByKey = new Map();
@@ -79,7 +79,7 @@ function mergeConcurrentItems(serverItems, incomingItems, clientUpdatedAt) {
     if (!key) continue;
 
     if (incomingByKey.has(key)) {
-      out.push(incomingByKey.get(key));
+      out.push(preserveServerMatches ? serverItem : incomingByKey.get(key));
       incomingByKey.delete(key);
       continue;
     }
@@ -274,7 +274,7 @@ export async function onRequest(context) {
           date: workDate,
           createdAt: text(record.createdAt || record.created_at || existingPayload.createdAt || existingPayload.created_at || existing?.created_at) || createdAt,
           updatedAt,
-          posItems: mergeConcurrentItems(existingPayload.posItems, record.posItems, clientUpdatedAt),
+          posItems: mergeConcurrentItems(existingPayload.posItems, record.posItems, clientUpdatedAt, true),
           gasItems: mergeConcurrentItems(existingPayload.gasItems, record.gasItems, clientUpdatedAt),
           attendanceLogs: Array.isArray(record.attendanceLogs) ? mergeConcurrentItems(existingPayload.attendanceLogs, record.attendanceLogs, clientUpdatedAt) : existingPayload.attendanceLogs
         };

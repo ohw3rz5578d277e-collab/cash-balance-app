@@ -6,7 +6,7 @@ window.__cashAttendanceBundleLoaded=true;
 // Attendance bundle loader only.
 // Navigation belongs to the main UI runtime; attendance-core only adds the
 // attendance destination when it is not already present.
-var v='20261023-crossdevice1';
+var v='20261031-mobile-edit1';
 
 function add(src,next){
   var s=document.createElement('script');

@@ -21,7 +21,7 @@ function record(id, time, updatedAt) {
   };
 }
 
-function harness({ dirty = false, pending = false, local, remote, error = null, openLatest = false }) {
+function harness({ dirty = false, pending = false, local, remote, error = null, openLatest = false, beforeReply = null }) {
   const status = [];
   const notices = [];
   const sandbox = {
@@ -30,6 +30,7 @@ function harness({ dirty = false, pending = false, local, remote, error = null, 
     state: local, records: [],
     Date,
     api: async () => {
+      if (beforeReply) await beforeReply(sandbox);
       if (error) throw error;
       return { records: remote };
     },
@@ -104,4 +105,36 @@ test('a failed cloud refresh never claims synchronization', async () => {
     error: new Error('offline'), dirty: false, pending: false });
   await h.refresh();
   assert.deepEqual(h.status.at(-1), { ok: false, message: '読込エラー' });
+});
+
+
+test('stale GET response cannot erase a newer punch after outbox was cleared', async () => {
+  const local = record('rec-current', '09:25', later);
+  const remote = record('rec-current', '09:00', earlier);
+  const h = harness({ local, remote: [remote], dirty: false, pending: false });
+  await h.refresh();
+  assert.equal(h.current().attendanceLogs[0].time, '09:25');
+  assert.equal(h.rows()[0].attendanceLogs[0].time, '09:25');
+  assert.equal(h.status.at(-1).ok, false, 'stale GET must not claim synced');
+});
+
+test('a punch made during an in-flight GET is not overwritten even after dirty was reset', async () => {
+  let release, started;
+  const hold = new Promise(resolve => { release = resolve; });
+  const ready = new Promise(resolve => { started = resolve; });
+  const h = harness({
+    local: record('rec-current', '09:00', earlier),
+    remote: [record('rec-current', '09:00', later)],
+    dirty: false, pending: false,
+    beforeReply: async () => { started(); await hold; }
+  });
+  const request = h.refresh();
+  await ready;
+  h.sandbox.state = record('rec-current', '09:25', '2026-11-03T00:03:00.000Z');
+  h.sandbox.dirty = false;
+  release();
+  await request;
+  assert.equal(h.current().attendanceLogs[0].time, '09:25');
+  assert.equal(h.rows()[0].attendanceLogs[0].time, '09:25');
+  assert.equal(h.status.at(-1).ok, false, 'in-flight edit cannot be declared synced');
 });

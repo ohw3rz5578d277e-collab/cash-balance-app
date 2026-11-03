@@ -276,7 +276,7 @@ export async function onRequest(context) {
           updatedAt,
           posItems: mergeConcurrentItems(existingPayload.posItems, record.posItems, clientUpdatedAt, true),
           gasItems: mergeConcurrentItems(existingPayload.gasItems, record.gasItems, clientUpdatedAt),
-          attendanceLogs: Array.isArray(record.attendanceLogs) ? mergeConcurrentItems(existingPayload.attendanceLogs, record.attendanceLogs, clientUpdatedAt) : existingPayload.attendanceLogs
+          attendanceLogs: Array.isArray(record.attendanceLogs) ? mergeConcurrentItems(existingPayload.attendanceLogs, record.attendanceLogs, clientUpdatedAt, true) : existingPayload.attendanceLogs
         };
       } else {
         savedRecord = {

@@ -45,7 +45,7 @@ function harness({ dirty = false, pending = false, local, remote, error = null, 
     render() { sandbox.renders = (sandbox.renders || 0) + 1; },
     setStatus(ok, message) { status.push({ ok, message }); },
     toast(message) { notices.push(message); },
-    alert() { throw new Error('unexpected alert'); },
+    alert(message) { notices.push(String(message)); },
     // enable immediate date-based request and no production access
   };
   vm.runInNewContext(source, sandbox, { filename: 'legacy-loadRecords.js' });

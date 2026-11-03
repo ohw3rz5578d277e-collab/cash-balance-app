@@ -96,6 +96,17 @@ test('one-tap punch is stored and immediately shown before cloud upload', () => 
   assert.match(h.list.innerHTML, /出勤/);
 });
 
+test('zero punches are never reported as cloud-confirmed', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-test', date: day, updatedAt: new Date().toISOString(), attendanceLogs: [] }
+  }));
+  h.core.setRemote('rec-test', []);
+  assert.equal(await h.core.syncD1(), false);
+  assert.equal(h.syncIndicator.textContent, '打刻未登録');
+});
+
 test('cloud confirmation requires the same punch ID, type, day and time', async () => {
   const h = harness();
   const day = h.core.localParts().date;

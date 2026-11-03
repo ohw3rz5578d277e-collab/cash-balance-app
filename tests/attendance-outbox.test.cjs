@@ -29,7 +29,7 @@ function harness(reply) {
   class Storage {
     constructor() { this.data = new Map(); }
     getItem(key) { return this.data.get(String(key)) ?? null; }
-    setItem(key, value) { this.data.set(String(key), String(value)); }
+    setItem(key, value) { if (this.rejectMergedDraft && String(key) === KEY && String(value).includes('att-break')) throw new Error('storage temporarily unavailable'); this.data.set(String(key), String(value)); }
     removeItem(key) { this.data.delete(String(key)); }
   }
   const localStorage = new Storage();
@@ -135,4 +135,17 @@ test('exact server match still confirms the original outbox flow', async () => {
   await h.api.flushOutbox();
   assert.equal(Object.keys(h.api.readOutbox()).length, 0);
   assert.equal(h.indicator.textContent, '同期済み');
+});
+
+test('failed local adoption preserves the outbox and backs off rather than retrying 5 times a second', async () => {
+  const client = entryRecord();
+  const extra = punch('att-break', 'breakStart', '11:30', '2026-11-03T02:00:00.000Z');
+  const server = { ...client, attendanceLogs: [...client.attendanceLogs, extra], updatedAt: '2026-11-03T03:00:00.000Z' };
+  const h = harness(async () => ({ ok: true, staleMerge: true, record: server }));
+  h.writeDraft(client);
+  h.localStorage.rejectMergedDraft = true;
+  await h.api.flushOutbox();
+  assert.equal(h.readDraft().attendanceLogs.length, 1, 'local data must not be falsely changed');
+  assert.equal(Object.keys(h.api.readOutbox()).length, 1, 'outbox must remain retryable');
+  assert.equal(h.scheduled.at(-1), 60000, 'storage failure should not create a tight retry loop');
 });

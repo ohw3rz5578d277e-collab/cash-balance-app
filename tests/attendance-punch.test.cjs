@@ -14,7 +14,7 @@ assert.notEqual(exposed, source, 'attendance bundle must expose the test seam');
 const windowStub = { addEventListener() {} };
 const sandbox = {
   window: windowStub,
-  document: { addEventListener() {} },
+  document: { readyState: 'loading', addEventListener() {} },
   navigator: { onLine: true },
   localStorage: { getItem() { return ''; } }
 };

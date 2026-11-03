@@ -38,13 +38,14 @@ function harness(reply) {
   const window = { dispatchEvent(ev) { events.push(ev); return true; } };
   const document = { getElementById(id) { return id === 'statusText' ? indicator : null; } };
   let response = reply;
+  const scheduled = [];
   const fetch = async (_, options) => ({
     ok: true,
     async json() { return await response(options); }
   });
   const sandbox = {
     window, document, localStorage, Storage, fetch,
-    setTimeout() { return 1; }, clearTimeout() {},
+    setTimeout(fn, ms) { scheduled.push(ms); return scheduled.length; }, clearTimeout() {},
     CustomEvent: function CustomEvent(type, options) { this.type = type; this.detail = options.detail; },
     Date, JSON
   };
@@ -53,7 +54,7 @@ function harness(reply) {
   const api = window.__outboxTests;
   const writeDraft = record => localStorage.setItem(KEY, JSON.stringify({ state: record }));
   const readDraft = () => JSON.parse(localStorage.getItem(KEY) || '{}').state;
-  return { api, localStorage, indicator, events, writeDraft, readDraft, setReply(v) { response = v; } };
+  return { api, localStorage, indicator, events, scheduled, writeDraft, readDraft, setReply(v) { response = v; } };
 }
 
 test('stale merge adds a proven newer punch and drains the outbox', async () => {
@@ -124,6 +125,7 @@ test('a second edit during POST is not erased by an earlier server reply', async
   await h.api.flushOutbox();
   assert.equal(Object.keys(h.api.readOutbox()).length, 1);
   assert.equal(h.readDraft().updatedAt, '2026-11-03T04:00:00.000Z');
+  assert.equal(h.scheduled.at(-1), 0, 'the newer edit should be retried immediately');
 });
 
 test('exact server match still confirms the original outbox flow', async () => {

@@ -1,0 +1,41 @@
+name: Attendance Regression (no production access)
+
+on:
+  pull_request:
+    paths:
+      - 'attendance-core.js'
+      - 'attendance-history.js'
+      - 'attendance.js'
+      - 'functions/index.js'
+      - 'index.html'
+      - 'tests/attendance-*.test.cjs'
+      - '.github/workflows/attendance-regression.yml'
+  push:
+    branches:
+      - 'fix/attendance-punch-state-20261103'
+    paths:
+      - 'attendance-core.js'
+      - 'attendance-history.js'
+      - 'attendance.js'
+      - 'tests/attendance-*.test.cjs'
+      - '.github/workflows/attendance-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  attendance-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check attendance scripts
+        run: |
+          set -euo pipefail
+          node --check attendance-core.js
+          node --check attendance-history.js
+          node --check attendance.js
+      - name: Run attendance regression tests
+        run: |
+          set -euo pipefail
+          node --test tests/attendance-*.test.cjs

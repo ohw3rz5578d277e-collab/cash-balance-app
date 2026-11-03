@@ -10,15 +10,9 @@ on:
       - 'index.html'
       - 'tests/attendance-*.test.cjs'
       - '.github/workflows/attendance-regression.yml'
-  push:
-    branches:
-      - 'fix/attendance-punch-state-20261103'
-    paths:
-      - 'attendance-core.js'
-      - 'attendance-history.js'
-      - 'attendance.js'
-      - 'tests/attendance-*.test.cjs'
-      - '.github/workflows/attendance-regression.yml'
+concurrency:
+  group: attendance-regression-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

@@ -29,7 +29,7 @@ function harness(reply) {
   class Storage {
     constructor() { this.data = new Map(); }
     getItem(key) { return this.data.get(String(key)) ?? null; }
-    setItem(key, value) { if (this.rejectMergedDraft && String(key) === KEY && String(value).includes('att-break')) throw new Error('storage temporarily unavailable'); this.data.set(String(key), String(value)); }
+    setItem(key, value) { if (this.rejectMergedDraft && String(key) === KEY && String(value).includes('att-break')) throw new Error('storage temporarily unavailable'); if(this.rejectOutbox&&String(key)==='cash_balance_app_save_outbox_v1')throw new Error('outbox full'); this.data.set(String(key), String(value)); }
     removeItem(key) { this.data.delete(String(key)); }
   }
   const localStorage = new Storage();
@@ -54,7 +54,7 @@ function harness(reply) {
   const api = window.__outboxTests;
   const writeDraft = record => localStorage.setItem(KEY, JSON.stringify({ state: record }));
   const readDraft = () => JSON.parse(localStorage.getItem(KEY) || '{}').state;
-  return { api, localStorage, indicator, events, scheduled, writeDraft, readDraft, setReply(v) { response = v; } };
+  return { api, window, localStorage, indicator, events, scheduled, writeDraft, readDraft, setReply(v) { response = v; } };
 }
 
 test('stale merge adds a proven newer punch and drains the outbox', async () => {
@@ -170,4 +170,27 @@ test('attendance tombstones must match the cloud before the outbox clears', asyn
   h.writeDraft(client);
   await h.api.flushOutbox();
   assert.equal(Object.keys(h.api.readOutbox()).length, 1);
+});
+
+test('explicit repair queues only the currently selected local attendance record', () => {
+  const h = harness(async () => ({ ok: true, staleMerge: false, record: entryRecord() }));
+  const record = entryRecord();
+  h.writeDraft(record);
+  h.localStorage.removeItem('cash_balance_app_save_outbox_v1');
+  assert.equal(h.window.__cashRetryAttendanceUpload('some-other-record'), false);
+  assert.equal(Object.keys(h.api.readOutbox()).length, 0);
+  assert.equal(h.window.__cashRetryAttendanceUpload(record.id), true);
+  assert.equal(h.api.readOutbox()[record.id].record.attendanceLogs[0].id, 'att-in');
+  assert.equal(h.scheduled.at(-1), 0);
+});
+
+test('repair does not say successful if local storage rejects the outbox', () => {
+  const h = harness(async () => ({ ok: true, staleMerge: false, record: entryRecord() }));
+  const record = entryRecord();
+  h.writeDraft(record);
+  h.localStorage.removeItem('cash_balance_app_save_outbox_v1');
+  h.localStorage.rejectOutbox = true;
+  assert.equal(h.window.__cashRetryAttendanceUpload(record.id), false);
+  assert.equal(Object.keys(h.api.readOutbox()).length, 0);
+  assert.equal(h.readDraft().attendanceLogs[0].id, 'att-in');
 });

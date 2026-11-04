@@ -21,10 +21,11 @@ function harness() {
   const list = { innerHTML: '', querySelectorAll() { return []; } };
   const base = { style: {} };
   const status = { textContent: '' };
+  const cloudStatus = { textContent: '' };
   const older = { disabled: false, textContent: '' };
   const wrap = {
     querySelector(selector) {
-      return { '#attAllHistoryList': list, '#attAllHistoryStatus': status, '#attAllHistoryOlder': older }[selector] || null;
+      return { '#attAllHistoryList': list, '#attAllHistoryStatus': status, '#attCloudCheckStatus': cloudStatus, '#attAllHistoryOlder': older }[selector] || null;
     }
   };
   const toast = { textContent: '', style: {} };
@@ -67,10 +68,10 @@ function harness() {
     'window.__attendanceFlowCore = {add, localParts, syncD1, setRemote(id, logs){remoteAttendanceByRecord[id] = logs}}; render=function(){};})();');
   vm.runInNewContext(exposedCore, sandbox, { filename: 'attendance-core.js' });
   const exposedHistory = expose(history,
-    'window.__attendanceFlowHistory = {render, setRecords(rows){records=rows}};})();');
+    'window.__attendanceFlowHistory = {render, setRecords(rows){records=rows}, setCloudRecords(rows){cloudRecords=rows;cloudCheckedAt=Date.now();cloudError=\'\'}};})();');
   vm.runInNewContext(exposedHistory, sandbox, { filename: 'attendance-history.js' });
 
-  return { saved, events, list, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
+  return { saved, events, list, cloudStatus, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
 }
 
 test('one-tap punch is stored and immediately shown before cloud upload', () => {
@@ -125,4 +126,21 @@ test('cloud confirmation requires the same punch ID, type, day and time', async 
   h.core.setRemote('rec-test', [log]);
   assert.equal(await h.core.syncD1(), true);
   assert.equal(h.syncIndicator.textContent, 'クラウドで打刻確認済み');
+});
+
+test('cloud and device punch totals remain independently visible even when D1 is empty', () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-local', date: day, updatedAt: new Date().toISOString(),
+      attendanceLogs: [{ id: 'att-local', type: 'clockIn', date: day, time: '09:20', createdAt: new Date().toISOString() }] }
+  }));
+  h.history.setCloudRecords([]);
+  h.history.render();
+  assert.match(h.cloudStatus.textContent, /クラウド勤怠：0件/);
+  assert.match(h.cloudStatus.textContent, /この端末：1件/);
+  assert.match(h.cloudStatus.textContent, /クラウド未確認/);
+  h.history.setCloudRecords([{ id: 'rec-local', date: day, attendanceLogs: [{ id: 'att-local', type: 'clockIn', date: day, time: '09:20' }] }]);
+  h.history.render();
+  assert.match(h.cloudStatus.textContent, /クラウド勤怠：1件/);
 });

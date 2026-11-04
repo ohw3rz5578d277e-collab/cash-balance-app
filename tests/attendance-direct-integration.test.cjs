@@ -31,7 +31,8 @@ function create({ range = [], exact = null, tombstone = false } = {}) {
       '#attCloudCheckStatus': cloudLabel, '#attAllHistoryOlder': older,
       '#attAllHistoryResend': resend, '#attAllHistoryRefresh': refresh }[key] || null;
   }};
-  const base = { style: {} };
+  let inserted = false;
+  const base = { style: {}, insertAdjacentElement(_position, _element) { inserted = true; } };
   const notice = { style: {}, textContent: '' };
   const view = { classList: { contains() { return true; } } };
   const window = {
@@ -43,9 +44,10 @@ function create({ range = [], exact = null, tombstone = false } = {}) {
   const document = {
     readyState: 'loading',
     addEventListener() {},
+    createElement() { return wrap; },
     getElementById(key) { return {
       attHistoryAllStyle: {}, 'view-attendance': view,
-      attendanceLogList: base, attendanceAllHistory: wrap,
+      attendanceLogList: base, attendanceAllHistory: inserted ? wrap : null,
       attHistoryToast: notice
     }[key] || null; }
   };

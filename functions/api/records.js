@@ -106,6 +106,24 @@ function mergeConcurrentItems(serverItems, incomingItems, clientUpdatedAt, prese
   return out;
 }
 
+// Attendance is shared by multiple devices. An omitted log is not proof of deletion.
+// Only explicit tombstones may remove an existing punch.
+function mergeAttendanceLogs(serverItems, incomingItems, deletedIds, keepServerOnConflict) {
+  const deleted = new Set((deletedIds || []).map(text).filter(Boolean));
+  const merged = new Map();
+  for (const log of Array.isArray(serverItems) ? serverItems : []) {
+    const key = itemKey(log);
+    if (key && !deleted.has(text(log.id))) merged.set(key, log);
+  }
+  for (const log of Array.isArray(incomingItems) ? incomingItems : []) {
+    const key = itemKey(log);
+    if (!key || deleted.has(text(log.id))) continue;
+    if (keepServerOnConflict && merged.has(key)) continue;
+    merged.set(key, log);
+  }
+  return [...merged.values()];
+}
+
 function isOlderClientRecord(record, existing) {
   if (!existing) return false;
   const serverUpdatedAt = Date.parse(text(existing.updated_at));
@@ -255,6 +273,16 @@ export async function onRequest(context) {
         : {};
       const staleClient = isOlderClientRecord(record, existing);
       const clientUpdatedAt = text(record.updatedAt || record.updated_at);
+      const attendanceDeletedIds = [...new Set([
+        ...(Array.isArray(existingPayload.attendanceDeletedIds) ? existingPayload.attendanceDeletedIds : []),
+        ...(Array.isArray(record.attendanceDeletedIds) ? record.attendanceDeletedIds : [])
+      ].map(text).filter(Boolean))];
+      const attendanceLogs = mergeAttendanceLogs(
+        existingPayload.attendanceLogs,
+        record.attendanceLogs,
+        attendanceDeletedIds,
+        staleClient
+      );
 
       const createdAt =
         text(record.createdAt || record.created_at || existing?.created_at) ||
@@ -276,7 +304,8 @@ export async function onRequest(context) {
           updatedAt,
           posItems: mergeConcurrentItems(existingPayload.posItems, record.posItems, clientUpdatedAt, true),
           gasItems: mergeConcurrentItems(existingPayload.gasItems, record.gasItems, clientUpdatedAt),
-          attendanceLogs: Array.isArray(record.attendanceLogs) ? mergeConcurrentItems(existingPayload.attendanceLogs, record.attendanceLogs, clientUpdatedAt, true) : existingPayload.attendanceLogs
+          attendanceLogs,
+          attendanceDeletedIds
         };
       } else {
         savedRecord = {
@@ -284,7 +313,9 @@ export async function onRequest(context) {
           id,
           date: workDate,
           createdAt,
-          updatedAt
+          updatedAt,
+          attendanceLogs,
+          attendanceDeletedIds
         };
       }
 

@@ -140,7 +140,7 @@ test('cloud and device punch totals remain independently visible even when D1 is
   h.history.render();
   assert.match(h.cloudStatus.textContent, /クラウド勤怠：0件/);
   assert.match(h.cloudStatus.textContent, /この端末：1件/);
-  assert.match(h.cloudStatus.textContent, /クラウド未確認/);
+  assert.match(h.cloudStatus.textContent, /直接照合待ち/);
   h.history.setCloudRecords([{ id: 'rec-local', date: day, attendanceLogs: [{ id: 'att-local', type: 'clockIn', date: day, time: '09:20' }] }]);
   h.history.render();
   assert.match(h.cloudStatus.textContent, /クラウド勤怠：1件/);

@@ -149,3 +149,25 @@ test('failed local adoption preserves the outbox and backs off rather than retry
   assert.equal(Object.keys(h.api.readOutbox()).length, 1, 'outbox must remain retryable');
   assert.equal(h.scheduled.at(-1), 60000, 'storage failure should not create a tight retry loop');
 });
+
+test('server-confirmed normal save can safely retain older cloud punches missing from this device', async () => {
+  const client = { ...entryRecord(), attendanceLogs: [] };
+  const olderCloudPunch = punch('att-old', 'clockIn', '08:30', '2026-11-03T00:00:00.000Z');
+  const server = { ...client, attendanceLogs: [olderCloudPunch], updatedAt: '2026-11-03T02:00:00.000Z', attendanceDeletedIds: [] };
+  const h = harness(async () => ({ ok: true, staleMerge: false, attendanceProtection: 'retained_existing_logs', record: server }));
+  h.writeDraft(client);
+  await h.api.flushOutbox();
+  assert.equal(Object.keys(h.api.readOutbox()).length, 0);
+  assert.equal(h.readDraft().attendanceLogs.length, 1);
+  assert.equal(h.readDraft().attendanceLogs[0].id, 'att-old');
+  assert.equal(h.indicator.textContent, '同期済み');
+});
+
+test('attendance tombstones must match the cloud before the outbox clears', async () => {
+  const client = { ...entryRecord(), attendanceLogs: [], attendanceDeletedIds: ['att-in'] };
+  const server = { ...client, attendanceLogs: [], attendanceDeletedIds: [] };
+  const h = harness(async () => ({ ok: true, staleMerge: false, record: server }));
+  h.writeDraft(client);
+  await h.api.flushOutbox();
+  assert.equal(Object.keys(h.api.readOutbox()).length, 1);
+});

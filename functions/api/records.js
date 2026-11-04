@@ -340,6 +340,7 @@ export async function onRequest(context) {
         ok: true,
         record: savedRecord,
         staleMerge,
+        attendanceProtection: 'retained_existing_logs',
         protection: staleMerge
           ? "stale_client_preserved_concurrent_items_and_honored_known_deletions"
           : "normal_save"

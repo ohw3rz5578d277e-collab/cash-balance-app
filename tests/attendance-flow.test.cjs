@@ -16,6 +16,7 @@ const expose = (source, trailer) => {
 
 function harness() {
   const saved = new Map();
+  let fetchReply = null;
   const events = [];
   const syncIndicator = { textContent: '', style: {} };
   const list = { innerHTML: '', querySelectorAll() { return []; } };
@@ -57,6 +58,7 @@ function harness() {
     document,
     localStorage,
     navigator: { onLine: true },
+    fetch: (...args) => fetchReply ? fetchReply(...args) : Promise.reject(new Error('offline in test')),
     setTimeout: () => 0,
     clearTimeout() {},
     CustomEvent: function CustomEvent(type, options) {
@@ -66,13 +68,13 @@ function harness() {
   };
 
   const exposedCore = expose(core,
-    'window.__attendanceFlowCore = {add, localParts, syncD1, setRemote(id, logs){remoteAttendanceByRecord[id] = logs}}; render=function(){};})();');
+    'window.__attendanceFlowCore = {add, localParts, syncD1, refreshRemoteAttendance, setRemote(id, logs){remoteAttendanceByRecord[id] = logs}}; render=function(){};})();');
   vm.runInNewContext(exposedCore, sandbox, { filename: 'attendance-core.js' });
   const exposedHistory = expose(history,
     'window.__attendanceFlowHistory = {render, setRecords(rows){records=rows}, setCloudRecords(rows){cloudRecords=rows;cloudCheckedAt=Date.now();cloudError=\'\'}};})();');
   vm.runInNewContext(exposedHistory, sandbox, { filename: 'attendance-history.js' });
 
-  return { saved, events, window, localStorage, list, cloudStatus, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
+  return { saved, events, window, localStorage, setFetchReply(fn) { fetchReply = fn; }, list, cloudStatus, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
 }
 
 test('one-tap punch is stored and immediately shown before cloud upload', () => {
@@ -209,4 +211,32 @@ test('direct cloud result for a different record must not change the badge', asy
   h.window.dispatchEvent({ type: 'cash-attendance-cloud-check',
     detail: { recordId: 'rec-another', logs: [], checkedAt: Date.now() } });
   assert.equal(h.syncIndicator.textContent, 'クラウドで打刻確認済み');
+});
+
+test('a late date-range response cannot undo a newer exact record check', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const log = { id: 'att-one', type: 'clockIn', date: day, time: '11:25' };
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-current', date: day, updatedAt: new Date().toISOString(), attendanceLogs: [log] }
+  }));
+  let release, started;
+  const pause = new Promise(resolve => { release = resolve; });
+  const began = new Promise(resolve => { started = resolve; });
+  h.setFetchReply(async () => {
+    started();
+    await pause;
+    return { ok: true, async json() { return { ok: true, records: [
+      { id: 'rec-current', date: day, attendanceLogs: [log] }
+    ] }; } };
+  });
+  const pendingRange = h.core.refreshRemoteAttendance(true);
+  await began;
+  h.window.dispatchEvent({ type: 'cash-attendance-cloud-check',
+    detail: { recordId: 'rec-current', logs: [], checkedAt: Date.now() + 1000 } });
+  assert.equal(h.syncIndicator.textContent, '端末保存済み・クラウド確認待ち');
+  release();
+  await pendingRange;
+  assert.equal(await h.core.syncD1(), false);
+  assert.equal(h.syncIndicator.textContent, '端末保存済み・クラウド確認待ち');
 });

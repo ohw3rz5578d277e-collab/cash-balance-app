@@ -98,3 +98,30 @@ test('stale client cannot overwrite an edited punch, or drop a newer punch', asy
   assert.equal(stored.attendanceLogs.find(x => x.id === 'att-in').time, '09:15');
   assert.equal(stored.attendanceLogs.find(x => x.id === 'att-break').time, '11:30');
 });
+
+test('a new device saving financial fields cannot wipe punches it did not load', async () => {
+  const { invoke } = createApi();
+  const a = item('att-in', 'clockIn', '09:00');
+  await invoke('POST', {
+    id: 'rec-test', date: '2026-11-03', updatedAt: '2026-11-03T01:00:00.000Z',
+    attendanceLogs: [a], dailySales: 1000
+  });
+  const b = await invoke('POST', {
+    id: 'rec-test', date: '2026-11-03', updatedAt: '2099-11-03T01:00:00.000Z',
+    attendanceLogs: [], dailySales: 1200
+  });
+  assert.equal(b.record.dailySales, 1200);
+  assert.equal(b.record.attendanceLogs.length, 1, 'the already saved punch must remain in D1');
+  assert.equal(b.record.attendanceLogs[0].id, 'att-in');
+});
+
+test('explicit punch deletion is persisted by tombstone across devices', async () => {
+  const { invoke } = createApi();
+  const a = item('att-in', 'clockIn', '09:00');
+  await invoke('POST', { id: 'rec-test', date: '2026-11-03', updatedAt: '2026-11-03T01:00:00.000Z', attendanceLogs: [a] });
+  const deleted = await invoke('POST', { id: 'rec-test', date: '2026-11-03', updatedAt: '2099-11-03T01:00:00.000Z', attendanceLogs: [], attendanceDeletedIds: ['att-in'] });
+  assert.equal(deleted.record.attendanceLogs.length, 0);
+  assert.deepEqual(deleted.record.attendanceDeletedIds, ['att-in']);
+  const stale = await invoke('POST', { id: 'rec-test', date: '2026-11-03', updatedAt: '2026-10-01T01:00:00.000Z', attendanceLogs: [a] });
+  assert.equal(stale.record.attendanceLogs.length, 0, 'a stale device may not resurrect a deleted punch');
+});

@@ -29,9 +29,10 @@ function harness() {
     }
   };
   const toast = { textContent: '', style: {} };
+  const handlers = new Map();
   const window = {
-    addEventListener() {},
-    dispatchEvent(event) { events.push(event); return true; }
+    addEventListener(type, fn) { handlers.set(type, [...(handlers.get(type) || []), fn]); },
+    dispatchEvent(event) { events.push(event); for (const fn of handlers.get(event.type) || []) fn(event); return true; }
   };
   const document = {
     readyState: 'loading',
@@ -178,4 +179,34 @@ test('a matching durable outbox entry permits normal punch confirmation pending 
   assert.equal(h.core.add('clockIn'), true);
   assert.match(h.syncIndicator.textContent, /クラウド同期待ち/);
   assert.equal(JSON.parse(h.saved.get('cash_balance_app_save_outbox_v1'))['rec-test'].record.attendanceLogs.length, 1);
+});
+
+test('a direct empty D1 record lookup clears an earlier false cloud-confirmed badge', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const log = { id: 'att-one', type: 'clockIn', date: day, time: '11:25' };
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-current', date: day, updatedAt: new Date().toISOString(), attendanceLogs: [log] }
+  }));
+  h.core.setRemote('rec-current', [log]);
+  assert.equal(await h.core.syncD1(), true);
+  assert.equal(h.syncIndicator.textContent, 'クラウドで打刻確認済み');
+  h.window.dispatchEvent({ type: 'cash-attendance-cloud-check',
+    detail: { recordId: 'rec-current', logs: [], checkedAt: Date.now() } });
+  assert.equal(h.syncIndicator.textContent, '端末保存済み・クラウド確認待ち');
+  assert.equal(await h.core.syncD1(), false);
+});
+
+test('direct cloud result for a different record must not change the badge', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const log = { id: 'att-one', type: 'clockIn', date: day, time: '11:25' };
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-current', date: day, updatedAt: new Date().toISOString(), attendanceLogs: [log] }
+  }));
+  h.core.setRemote('rec-current', [log]);
+  assert.equal(await h.core.syncD1(), true);
+  h.window.dispatchEvent({ type: 'cash-attendance-cloud-check',
+    detail: { recordId: 'rec-another', logs: [], checkedAt: Date.now() } });
+  assert.equal(h.syncIndicator.textContent, 'クラウドで打刻確認済み');
 });

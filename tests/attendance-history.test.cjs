@@ -9,27 +9,34 @@ const vm = require('node:vm');
 // Test the shipped history code with deterministic in-memory storage.
 // No Cloudflare, production D1 or user records are accessed.
 const raw = fs.readFileSync(path.join(__dirname, '..', 'attendance-history.js'), 'utf8');
-const source = raw.replace(/\}\)\(\);\s*$/, 'window.__historyTests = {mergeDraft, flatten, saveRecord};})();');
+const source = raw.replace(/\}\)\(\);\s*$/, 'window.__historyTests = {mergeDraft, flatten, saveRecord, compareLocalCloud, verifyCurrentCloud, getDirect:()=>directCloud, getCloud:()=>cloudRecords};})();');
 assert.notEqual(source, raw, 'test seam should expose history helpers');
 
 function harness() {
   const storage = new Map();
   const events = [];
+  let remoteRecord = null, beforeReply = null;
   const windowStub = { __cashSaveGuardInstalled: true, dispatchEvent(event) { events.push(event); return true; } };
   const sandbox = {
     window: windowStub,
     CustomEvent: function CustomEvent(type, options) { this.type = type; this.detail = options.detail; },
     document: { readyState: 'loading', addEventListener() {} },
+    fetch: async (url) => {
+      if (beforeReply) await beforeReply();
+      assert.match(String(url), /\\?id=/);
+      return { ok: true, status: 200, async json() { return { ok: true, records: remoteRecord ? [remoteRecord] : [] }; } };
+    },
     localStorage: {
       getItem(key) { return storage.get(key) || null; },
       setItem(key, value) { storage.set(key, String(value)); }
     }
   };
   vm.runInNewContext(source, sandbox, { filename: 'attendance-history.js' });
+  storage.set('cash_balance_app_pin_v21', 'test-pin');
   const saveDraft = (state) => storage.set('cash_balance_app_draft_v21', JSON.stringify({ state }));
   const setPending = (id, pending) => storage.set('cash_balance_app_save_outbox_v1', JSON.stringify(pending ? { [id]: { queuedAt: new Date().toISOString() } } : {}));
   const getDraft = () => JSON.parse(storage.get('cash_balance_app_draft_v21') || '{}').state;
-  return { ...windowStub.__historyTests, saveDraft, setPending, getDraft, events };
+  return { ...windowStub.__historyTests, saveDraft, setPending, getDraft, events, setRemote: x => { remoteRecord = x; }, beforeReply: x => { beforeReply = x; } };
 }
 
 const earlier = '2026-11-03T01:00:00.000Z';
@@ -104,4 +111,48 @@ test('manual edits do not mutate the current draft if the edit throws', async ()
   );
   assert.equal(h.getDraft().attendanceLogs.length, 1);
   assert.equal(h.events.length, 0);
+});
+
+test('direct record-ID verification detects a punch missing from cloud despite local display', async () => {
+  const h = harness();
+  h.saveDraft(record(later, [inLog]));
+  h.setRemote(null);
+  const result = await h.verifyCurrentCloud();
+  assert.equal(result.missing.length, 1);
+  assert.equal(result.missing[0].id, 'att-in');
+  assert.equal(result.blocked, false);
+  assert.ok(h.events.some(e => e.type === 'cash-attendance-cloud-check' && e.detail.recordId === 'rec-test' && e.detail.logs.length === 0));
+});
+
+test('record-ID verification finds the exact cloud punch even if the date-range list omitted it', async () => {
+  const h = harness();
+  h.saveDraft(record(later, [inLog]));
+  h.setRemote(record(later, [inLog]));
+  const result = await h.verifyCurrentCloud();
+  assert.equal(result.missing.length, 0);
+  assert.equal(result.cloudCount, 1);
+  assert.equal(h.getCloud().length, 1);
+  assert.equal(h.getCloud()[0].attendanceLogs[0].id, 'att-in');
+});
+
+test('deleted punch tombstones block unsafe automatic restoration', async () => {
+  const h = harness();
+  h.saveDraft(record(later, [inLog]));
+  h.setRemote({ ...record(later, []), attendanceDeletedIds: ['att-in'] });
+  const result = await h.verifyCurrentCloud();
+  assert.equal(result.missing.length, 1);
+  assert.equal(result.blocked, true);
+});
+
+test('an in-flight exact GET cannot confirm a draft changed during the request', async () => {
+  const h = harness();
+  h.saveDraft(record(earlier, [inLog]));
+  h.setRemote(record(earlier, [inLog]));
+  h.beforeReply(() => {
+    h.saveDraft(record(later, [inLog, outLog]));
+  });
+  const result = await h.verifyCurrentCloud();
+  assert.equal(result, null);
+  assert.equal(h.getDirect(), null);
+  assert.equal(h.events.filter(e => e.type === 'cash-attendance-cloud-check').length, 0);
 });

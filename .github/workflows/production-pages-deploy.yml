@@ -39,6 +39,11 @@ jobs:
         run: |
           set -euo pipefail
           node --check home-dashboard.js
+          node --check attendance-core.js
+          node --check attendance-history.js
+          node --check attendance.js
+          node --check history-manager.js
+          node --test tests/attendance-*.test.cjs
           grep -Fq '#view-home{display:none}' home-dashboard.js
           grep -Fq '#view-home.active{display:flex;flex-direction:column;gap:12px}' home-dashboard.js
           grep -Fq 'function forgetDeletedRecord(id)' home-dashboard.js

@@ -71,7 +71,7 @@ function harness() {
     'window.__attendanceFlowHistory = {render, setRecords(rows){records=rows}, setCloudRecords(rows){cloudRecords=rows;cloudCheckedAt=Date.now();cloudError=\'\'}};})();');
   vm.runInNewContext(exposedHistory, sandbox, { filename: 'attendance-history.js' });
 
-  return { saved, events, list, cloudStatus, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
+  return { saved, events, window, localStorage, list, cloudStatus, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
 }
 
 test('one-tap punch is stored and immediately shown before cloud upload', () => {
@@ -143,4 +143,39 @@ test('cloud and device punch totals remain independently visible even when D1 is
   h.history.setCloudRecords([{ id: 'rec-local', date: day, attendanceLogs: [{ id: 'att-local', type: 'clockIn', date: day, time: '09:20' }] }]);
   h.history.render();
   assert.match(h.cloudStatus.textContent, /クラウド勤怠：1件/);
+});
+
+test('outbox failure after local save is never reported as cloud-ready', () => {
+  const h = harness();
+  h.window.__cashSaveGuardInstalled = true;
+  const day = h.core.localParts().date;
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-test', date: day, attendanceLogs: [] }
+  }));
+  assert.equal(h.core.add('clockIn'), false);
+  const local = JSON.parse(h.saved.get('cash_balance_app_draft_v21')).state;
+  assert.equal(local.attendanceLogs.length, 1, 'the local punch must remain recoverable');
+  assert.match(h.syncIndicator.textContent, /クラウド送信準備に失敗/);
+  assert.ok(h.events.some(e => e.type === 'cash-attendance-saved'));
+});
+
+test('a matching durable outbox entry permits normal punch confirmation pending cloud', () => {
+  const h = harness();
+  h.window.__cashSaveGuardInstalled = true;
+  const original = h.localStorage.setItem.bind(h.localStorage);
+  h.localStorage.setItem = (key, value) => {
+    original(key, value);
+    if (key !== 'cash_balance_app_draft_v21') return;
+    const state = JSON.parse(value).state;
+    original('cash_balance_app_save_outbox_v1', JSON.stringify({
+      [state.id]: { record: state, queuedAt: new Date().toISOString() }
+    }));
+  };
+  const day = h.core.localParts().date;
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-test', date: day, attendanceLogs: [] }
+  }));
+  assert.equal(h.core.add('clockIn'), true);
+  assert.match(h.syncIndicator.textContent, /クラウド同期待ち/);
+  assert.equal(JSON.parse(h.saved.get('cash_balance_app_save_outbox_v1'))['rec-test'].record.attendanceLogs.length, 1);
 });

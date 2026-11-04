@@ -215,6 +215,7 @@ test('direct cloud result for a different record must not change the badge', asy
 
 test('a late date-range response cannot undo a newer exact record check', async () => {
   const h = harness();
+  h.saved.set('cash_balance_app_pin_v21', 'test-pin');
   const day = h.core.localParts().date;
   const log = { id: 'att-one', type: 'clockIn', date: day, time: '11:25' };
   h.saved.set('cash_balance_app_draft_v21', JSON.stringify({

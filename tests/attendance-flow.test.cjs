@@ -268,3 +268,20 @@ test('explicitly deleted punches are excluded from the effective shift state', (
   });
   assert.deepEqual(Array.from(combined.attendanceLogs, l=>l.id),['att-in']);
 });
+
+test('a fresh exact-ID D1 confirmation survives a subsequent incomplete date-range lookup', async () => {
+  const h=harness();
+  h.saved.set('cash_balance_app_pin_v21','test-pin');
+  const day=h.core.localParts().date;
+  const punch={id:'att-1125',type:'clockIn',date:day,time:'11:25'};
+  h.saved.set('cash_balance_app_draft_v21',JSON.stringify({
+    state:{id:'rec-current',date:day,updatedAt:new Date().toISOString(),attendanceLogs:[punch]}
+  }));
+  h.window.dispatchEvent({type:'cash-attendance-cloud-check',
+    detail:{recordId:'rec-current',logs:[punch],checkedAt:Date.now()-1000}});
+  assert.equal(await h.core.syncD1(),true);
+  h.setFetchReply(async () => ({ok:true,async json(){return {ok:true,records:[]}}}));
+  await h.core.refreshRemoteAttendance(true);
+  assert.equal(await h.core.syncD1(),true,'same-record exact GET should stay authoritative for its short freshness window');
+  assert.equal(h.syncIndicator.textContent,'クラウドで打刻確認済み');
+});

@@ -38,7 +38,7 @@ function setup(sale,paid,mode='paid') {
     Date, Math, Number, String
   };
   vm.runInNewContext(source,sandbox,{filename:'POS from index.html'});
-  return {h:window.__posTest, E, pos, state, messages, changedCalls:()=>sandbox.changedCalls||0};
+  return {h:window.__posTest, E, pos, state, messages, sandbox, changedCalls:()=>sandbox.changedCalls||0};
 }
 
 test('the reported ¥10,000 sale with ¥948 tender shows ¥9,052 shortage and cannot post',()=>{
@@ -95,4 +95,43 @@ test('POS keypad updates the tender and re-evaluates shortfall immediately',()=>
   x.h.keyInput('C');
   assert.equal(x.pos.paid,'0');
   assert.equal(x.E.posChangeLabel.textContent,'おつり');
+});
+
+test('iPhone pointerdown uses one keypad handler and recalculates shortage',()=>{
+  const x=setup(10000,'');
+  const keys=['9','4','8'];
+  const buttons=keys.map(key=>({dataset:{key},handlers:{},
+    addEventListener(type,fn,opts){this.handlers[type]=fn;this.opts=opts;}
+  }));
+  x.sandbox.window.PointerEvent=function PointerEvent(){};
+  x.sandbox.document.querySelectorAll=(selector)=>selector==='[data-key]'?buttons:[];
+  const marker="document.querySelectorAll('[data-key]').forEach(function(b){";
+  const from=html.indexOf(marker);
+  const to=html.indexOf(';E.posMemo.oninput=',from);
+  assert.ok(from>=0&&to>from,'production keypad binding is present');
+  vm.runInNewContext(html.slice(from,to+1),x.sandbox,{filename:'POS keypad event bindings'});
+  for(const btn of buttons){
+    assert.equal(typeof btn.handlers.pointerdown,'function');
+    assert.equal(btn.handlers.click,undefined,'avoid a second click handler on iPhone');
+    assert.equal(btn.opts.passive,false);
+    let prevented=false;
+    btn.handlers.pointerdown({preventDefault(){prevented=true;}});
+    assert.equal(prevented,true);
+  }
+  assert.equal(x.pos.paid,'948');
+  assert.equal(x.E.posChangeView.textContent,'¥9,052');
+  assert.equal(x.E.posChangeLabel.textContent,'不足額');
+});
+
+test('fallback touch browsers use click input without requiring PointerEvent',()=>{
+  const x=setup(10000,'');
+  const button={dataset:{key:'5'},handlers:{},addEventListener(type,fn){this.handlers[type]=fn;}};
+  x.sandbox.document.querySelectorAll=(selector)=>selector==='[data-key]'?[button]:[];
+  const start=html.indexOf("document.querySelectorAll('[data-key]').forEach(function(b){");
+  const end=html.indexOf(';E.posMemo.oninput=',start);
+  vm.runInNewContext(html.slice(start,end+1),x.sandbox);
+  assert.equal(button.handlers.pointerdown,undefined);
+  button.handlers.click({preventDefault(){}});
+  assert.equal(x.pos.paid,'5');
+  assert.equal(x.E.posChangeView.textContent,'¥9,995');
 });

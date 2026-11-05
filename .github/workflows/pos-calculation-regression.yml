@@ -6,6 +6,7 @@ on:
       - 'index.html'
       - 'tests/pos-*.test.cjs'
       - '.github/workflows/pos-calculation-regression.yml'
+      - '.github/workflows/production-pages-deploy.yml'
 
 permissions:
   contents: read

@@ -16,6 +16,7 @@ const expose = (source, trailer) => {
 
 function harness() {
   const saved = new Map();
+  let fetchReply = null;
   const events = [];
   const syncIndicator = { textContent: '', style: {} };
   const list = { innerHTML: '', querySelectorAll() { return []; } };
@@ -29,9 +30,10 @@ function harness() {
     }
   };
   const toast = { textContent: '', style: {} };
+  const handlers = new Map();
   const window = {
-    addEventListener() {},
-    dispatchEvent(event) { events.push(event); return true; }
+    addEventListener(type, fn) { handlers.set(type, [...(handlers.get(type) || []), fn]); },
+    dispatchEvent(event) { events.push(event); for (const fn of handlers.get(event.type) || []) fn(event); return true; }
   };
   const document = {
     readyState: 'loading',
@@ -56,6 +58,7 @@ function harness() {
     document,
     localStorage,
     navigator: { onLine: true },
+    fetch: (...args) => fetchReply ? fetchReply(...args) : Promise.reject(new Error('offline in test')),
     setTimeout: () => 0,
     clearTimeout() {},
     CustomEvent: function CustomEvent(type, options) {
@@ -65,13 +68,13 @@ function harness() {
   };
 
   const exposedCore = expose(core,
-    'window.__attendanceFlowCore = {add, localParts, syncD1, setRemote(id, logs){remoteAttendanceByRecord[id] = logs}}; render=function(){};})();');
+    'window.__attendanceFlowCore = {add, localParts, syncD1, refreshRemoteAttendance, combinedAttendance, setRemote(id, logs){remoteAttendanceByRecord[id] = logs}, setRemoteList(logs){remoteAttendance=logs}}; render=function(){};})();');
   vm.runInNewContext(exposedCore, sandbox, { filename: 'attendance-core.js' });
   const exposedHistory = expose(history,
     'window.__attendanceFlowHistory = {render, setRecords(rows){records=rows}, setCloudRecords(rows){cloudRecords=rows;cloudCheckedAt=Date.now();cloudError=\'\'}};})();');
   vm.runInNewContext(exposedHistory, sandbox, { filename: 'attendance-history.js' });
 
-  return { saved, events, window, localStorage, list, cloudStatus, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
+  return { saved, events, window, localStorage, setFetchReply(fn) { fetchReply = fn; }, list, cloudStatus, syncIndicator, core: window.__attendanceFlowCore, history: window.__attendanceFlowHistory };
 }
 
 test('one-tap punch is stored and immediately shown before cloud upload', () => {
@@ -139,7 +142,7 @@ test('cloud and device punch totals remain independently visible even when D1 is
   h.history.render();
   assert.match(h.cloudStatus.textContent, /クラウド勤怠：0件/);
   assert.match(h.cloudStatus.textContent, /この端末：1件/);
-  assert.match(h.cloudStatus.textContent, /クラウド未確認/);
+  assert.match(h.cloudStatus.textContent, /直接照合待ち/);
   h.history.setCloudRecords([{ id: 'rec-local', date: day, attendanceLogs: [{ id: 'att-local', type: 'clockIn', date: day, time: '09:20' }] }]);
   h.history.render();
   assert.match(h.cloudStatus.textContent, /クラウド勤怠：1件/);
@@ -178,4 +181,107 @@ test('a matching durable outbox entry permits normal punch confirmation pending 
   assert.equal(h.core.add('clockIn'), true);
   assert.match(h.syncIndicator.textContent, /クラウド同期待ち/);
   assert.equal(JSON.parse(h.saved.get('cash_balance_app_save_outbox_v1'))['rec-test'].record.attendanceLogs.length, 1);
+});
+
+test('a direct empty D1 record lookup clears an earlier false cloud-confirmed badge', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const log = { id: 'att-one', type: 'clockIn', date: day, time: '11:25' };
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-current', date: day, updatedAt: new Date().toISOString(), attendanceLogs: [log] }
+  }));
+  h.core.setRemote('rec-current', [log]);
+  assert.equal(await h.core.syncD1(), true);
+  assert.equal(h.syncIndicator.textContent, 'クラウドで打刻確認済み');
+  h.window.dispatchEvent({ type: 'cash-attendance-cloud-check',
+    detail: { recordId: 'rec-current', logs: [], checkedAt: Date.now() } });
+  assert.equal(h.syncIndicator.textContent, '端末保存済み・クラウド確認待ち');
+  assert.equal(await h.core.syncD1(), false);
+});
+
+test('direct cloud result for a different record must not change the badge', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const log = { id: 'att-one', type: 'clockIn', date: day, time: '11:25' };
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-current', date: day, updatedAt: new Date().toISOString(), attendanceLogs: [log] }
+  }));
+  h.core.setRemote('rec-current', [log]);
+  assert.equal(await h.core.syncD1(), true);
+  h.window.dispatchEvent({ type: 'cash-attendance-cloud-check',
+    detail: { recordId: 'rec-another', logs: [], checkedAt: Date.now() } });
+  assert.equal(h.syncIndicator.textContent, 'クラウドで打刻確認済み');
+});
+
+test('a late date-range response cannot undo a newer exact record check', async () => {
+  const h = harness();
+  h.saved.set('cash_balance_app_pin_v21', 'test-pin');
+  const day = h.core.localParts().date;
+  const log = { id: 'att-one', type: 'clockIn', date: day, time: '11:25' };
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state: { id: 'rec-current', date: day, updatedAt: new Date().toISOString(), attendanceLogs: [log] }
+  }));
+  let release, started;
+  const pause = new Promise(resolve => { release = resolve; });
+  const began = new Promise(resolve => { started = resolve; });
+  h.setFetchReply(async () => {
+    started();
+    await pause;
+    return { ok: true, async json() { return { ok: true, records: [
+      { id: 'rec-current', date: day, attendanceLogs: [log] }
+    ] }; } };
+  });
+  const pendingRange = h.core.refreshRemoteAttendance(true);
+  await began;
+  h.window.dispatchEvent({ type: 'cash-attendance-cloud-check',
+    detail: { recordId: 'rec-current', logs: [], checkedAt: Date.now() + 1000 } });
+  assert.equal(h.syncIndicator.textContent, '端末保存済み・クラウド確認待ち');
+  release();
+  await pendingRange;
+  assert.equal(await h.core.syncD1(), false);
+  assert.equal(h.syncIndicator.textContent, '端末保存済み・クラウド確認待ち');
+});
+
+test('cloud confirmation requires no extra server-side punches after a local deletion', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const inLog = {id:'att-in',type:'clockIn',date:day,time:'09:00'};
+  const removedLog = {id:'att-removed',type:'breakStart',date:day,time:'12:00'};
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state:{id:'rec-test',date:day,updatedAt:new Date().toISOString(),attendanceLogs:[inLog],attendanceDeletedIds:['att-removed']}
+  }));
+  h.core.setRemote('rec-test',[inLog,removedLog]);
+  assert.equal(await h.core.syncD1(),false,'the old server punch must not count as fully synchronized');
+  assert.match(h.syncIndicator.textContent,/クラウド確認待ち/);
+  h.core.setRemote('rec-test',[inLog]);
+  assert.equal(await h.core.syncD1(),true);
+});
+
+test('explicitly deleted punches are excluded from the effective shift state', () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const inLog={id:'att-in',type:'clockIn',date:day,time:'09:00'};
+  const removedLog={id:'att-removed',type:'clockOut',date:day,time:'11:00'};
+  h.core.setRemoteList([inLog,removedLog]);
+  const combined=h.core.combinedAttendance({
+    id:'rec-test',date:day,attendanceLogs:[inLog],attendanceDeletedIds:['att-removed']
+  });
+  assert.deepEqual(Array.from(combined.attendanceLogs, l=>l.id),['att-in']);
+});
+
+test('a fresh exact-ID D1 confirmation survives a subsequent incomplete date-range lookup', async () => {
+  const h=harness();
+  h.saved.set('cash_balance_app_pin_v21','test-pin');
+  const day=h.core.localParts().date;
+  const punch={id:'att-1125',type:'clockIn',date:day,time:'11:25'};
+  h.saved.set('cash_balance_app_draft_v21',JSON.stringify({
+    state:{id:'rec-current',date:day,updatedAt:new Date().toISOString(),attendanceLogs:[punch]}
+  }));
+  h.window.dispatchEvent({type:'cash-attendance-cloud-check',
+    detail:{recordId:'rec-current',logs:[punch],checkedAt:Date.now()-1000}});
+  assert.equal(await h.core.syncD1(),true);
+  h.setFetchReply(async () => ({ok:true,async json(){return {ok:true,records:[]}}}));
+  await h.core.refreshRemoteAttendance(true);
+  assert.equal(await h.core.syncD1(),true,'same-record exact GET should stay authoritative for its short freshness window');
+  assert.equal(h.syncIndicator.textContent,'クラウドで打刻確認済み');
 });

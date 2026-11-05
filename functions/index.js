@@ -29,6 +29,8 @@ function recordSignature(r){return [String(r&&r.updatedAt||''),syncComparable(r)
 function setSaveStatus(ok,text){var el=document.getElementById('statusText');if(!el)return;el.textContent=text;if(ok)el.classList.add('ok');else el.classList.remove('ok')}
 function localPendingText(){return outboxCount()?'端末保存済み・クラウド同期待ち':'端末保存済み'}
 function queueRecord(r,immediate){if(!r||!r.id)return;saveRecovery(r);var box=readOutbox();box[String(r.id)]={record:JSON.parse(JSON.stringify(r)),signature:recordSignature(r),queuedAt:new Date().toISOString(),attempts:0};writeOutbox(box);setSaveStatus(false,localPendingText());if(Date.now()>=cloudPausedUntil)scheduleFlush(immediate?0:250)}
+// Explicit repair of a known local attendance draft. Never use an unrelated record.
+window.__cashRetryAttendanceUpload=function(id){var current=draftState();if(!current||String(current.id)!==String(id)||!Array.isArray(current.attendanceLogs)||!current.attendanceLogs.length)return false;var existing=readOutbox()[String(id)];if(existing&&existing.signature===recordSignature(current)){scheduleFlush(0);return true}queueRecord(current,true);var queued=readOutbox()[String(id)];return !!(queued&&queued.signature===recordSignature(current))};
 function forgetDeletedRecord(id){if(!id)return;id=String(id);var box=readOutbox();if(box[id]){delete box[id];writeOutbox(box)}try{var x=JSON.parse(localStorage.getItem(BACKUPKEY)||'null'),r=x&&x.record;if(r&&String(r.id)===id)nativeSetItem.call(localStorage,BACKUPKEY,'')}catch(e){}}
 window.__cashForgetDeletedRecord=forgetDeletedRecord;
 function scheduleFlush(ms){clearTimeout(flushTimer);flushTimer=setTimeout(flushOutbox,Math.max(0,ms||0))}
@@ -107,7 +109,7 @@ window.addEventListener('pagehide',emergencyFlush);window.addEventListener('befo
 window.addEventListener('DOMContentLoaded',function(){seedCurrentDraft();if(!window.__cashLatestStartupRequested){window.__cashLatestStartupRequested=true;openLatest()}schedule();setTimeout(flushOutbox,100)});
 })();
 </script>`;
-  html = html.replace('</body>', patch + '<script src="/bank-deposit-reconcile.js?v=20261005-bank8"></script><script src="/attendance.js?v=20261103-historyfix3"></script><script src="/cash-order-audit.js?v=20261026-v1"></script></body>');
+  html = html.replace('</body>', patch + '<script src="/bank-deposit-reconcile.js?v=20261005-bank8"></script><script src="/attendance.js?v=20261104-d1exact1"></script><script src="/cash-order-audit.js?v=20261026-v1"></script></body>');
   const headers = new Headers(response.headers);
   headers.set('Cache-Control','no-store, no-cache, must-revalidate, max-age=0');
   return new Response(html,{status:response.status,statusText:response.statusText,headers});

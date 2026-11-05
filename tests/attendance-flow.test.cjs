@@ -68,7 +68,7 @@ function harness() {
   };
 
   const exposedCore = expose(core,
-    'window.__attendanceFlowCore = {add, localParts, syncD1, refreshRemoteAttendance, setRemote(id, logs){remoteAttendanceByRecord[id] = logs}}; render=function(){};})();');
+    'window.__attendanceFlowCore = {add, localParts, syncD1, refreshRemoteAttendance, combinedAttendance, setRemote(id, logs){remoteAttendanceByRecord[id] = logs}, setRemoteList(logs){remoteAttendance=logs}}; render=function(){};})();');
   vm.runInNewContext(exposedCore, sandbox, { filename: 'attendance-core.js' });
   const exposedHistory = expose(history,
     'window.__attendanceFlowHistory = {render, setRecords(rows){records=rows}, setCloudRecords(rows){cloudRecords=rows;cloudCheckedAt=Date.now();cloudError=\'\'}};})();');
@@ -240,4 +240,31 @@ test('a late date-range response cannot undo a newer exact record check', async 
   await pendingRange;
   assert.equal(await h.core.syncD1(), false);
   assert.equal(h.syncIndicator.textContent, '端末保存済み・クラウド確認待ち');
+});
+
+test('cloud confirmation requires no extra server-side punches after a local deletion', async () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const inLog = {id:'att-in',type:'clockIn',date:day,time:'09:00'};
+  const removedLog = {id:'att-removed',type:'breakStart',date:day,time:'12:00'};
+  h.saved.set('cash_balance_app_draft_v21', JSON.stringify({
+    state:{id:'rec-test',date:day,updatedAt:new Date().toISOString(),attendanceLogs:[inLog],attendanceDeletedIds:['att-removed']}
+  }));
+  h.core.setRemote('rec-test',[inLog,removedLog]);
+  assert.equal(await h.core.syncD1(),false,'the old server punch must not count as fully synchronized');
+  assert.match(h.syncIndicator.textContent,/クラウド確認待ち/);
+  h.core.setRemote('rec-test',[inLog]);
+  assert.equal(await h.core.syncD1(),true);
+});
+
+test('explicitly deleted punches are excluded from the effective shift state', () => {
+  const h = harness();
+  const day = h.core.localParts().date;
+  const inLog={id:'att-in',type:'clockIn',date:day,time:'09:00'};
+  const removedLog={id:'att-removed',type:'clockOut',date:day,time:'11:00'};
+  h.core.setRemoteList([inLog,removedLog]);
+  const combined=h.core.combinedAttendance({
+    id:'rec-test',date:day,attendanceLogs:[inLog],attendanceDeletedIds:['att-removed']
+  });
+  assert.deepEqual(Array.from(combined.attendanceLogs, l=>l.id),['att-in']);
 });

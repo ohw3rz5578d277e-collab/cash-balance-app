@@ -1,0 +1,26 @@
+name: POS Calculation Regression (no production access)
+
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'tests/pos-*.test.cjs'
+      - '.github/workflows/pos-calculation-regression.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pos-calculation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pos-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify POS UI arithmetic and keypad
+        run: |
+          set -euo pipefail
+          node --test tests/pos-*.test.cjs

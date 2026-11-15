@@ -43,22 +43,10 @@ jobs:
           node --check attendance-history.js
           node --check attendance.js
           node --check history-manager.js
-          node --test tests/attendance-*.test.cjs
-          node --test tests/pos-*.test.cjs
-          grep -Fq '#view-home{display:none}' home-dashboard.js
-          grep -Fq '#view-home.active{display:flex;flex-direction:column;gap:12px}' home-dashboard.js
-          grep -Fq 'function forgetDeletedRecord(id)' home-dashboard.js
-          grep -Fq '__cashDeletingRecordId' home-dashboard.js
-          python3 - <<'PY'
-          from pathlib import Path
-          src=Path("functions/index.js").read_text()
-          start=src.find("<script>")
-          end=src.find("</script>`;",start)
-          if start < 0 or end <= start:
-              raise SystemExit("inline script boundary missing")
-          Path("/tmp/cash-balance-inline.js").write_text(src[start+8:end])
-          PY
-          node --check /tmp/cash-balance-inline.js
+          node --check bank-deposit-reconcile.js
+          node --check functions/index.js
+          node --check functions/_middleware.js
+          node --test tests/*.test.cjs
           echo "PRODUCTION_PREFLIGHT=PASS"
 
       - name: Deploy Cloudflare Pages

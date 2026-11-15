@@ -52,3 +52,22 @@ test('attendance scripts are not duplicated by the static and injected loaders',
   const history = read('attendance-history.js');
   assert.match(history, /__cashAttendanceHistoryLoaded/);
 });
+
+test('the HTML delivered through both Pages handlers contains three runnable inline scripts', async () => {
+  const middleware = await import('../functions/_middleware.js');
+  const index = await import('../functions/index.js');
+  const response = await middleware.onRequest({
+    next: () => index.onRequest({
+      next: () => new Response(read('index.html'), {
+        headers: { 'Content-Type': 'text/html' },
+      }),
+    }),
+  });
+
+  const html = await response.text();
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length, 3);
+  for (const [, script] of scripts) {
+    assert.doesNotThrow(() => new vm.Script(script));
+  }
+});

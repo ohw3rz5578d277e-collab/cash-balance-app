@@ -12,7 +12,7 @@ const begin = source.indexOf('(function(){');
 const end = source.indexOf('function ensureDataCheckStyle(){', begin);
 assert.ok(begin > 0 && end > begin, 'find injected outbox helper boundaries');
 const exposed = source.slice(begin, end) +
-  '\nwindow.__outboxTests = {queueRecord, flushOutbox, readOutbox, safeServerAdditions};})();';
+  '\nwindow.__outboxTests = {queueRecord, flushOutbox, readOutbox, safeServerAdditions, forgetDeletedRecord};})();';
 
 const KEY = 'cash_balance_app_draft_v21';
 const PINKEY = 'cash_balance_app_pin_v21';
@@ -54,7 +54,7 @@ function harness(reply) {
   const api = window.__outboxTests;
   const writeDraft = record => localStorage.setItem(KEY, JSON.stringify({ state: record }));
   const readDraft = () => JSON.parse(localStorage.getItem(KEY) || '{}').state;
-  return { api, localStorage, indicator, events, scheduled, writeDraft, readDraft, setReply(v) { response = v; } };
+  return { api, localStorage, indicator, events, scheduled, writeDraft, readDraft, window, setReply(v) { response = v; } };
 }
 
 test('stale merge adds a proven newer punch and drains the outbox', async () => {
@@ -170,4 +170,19 @@ test('attendance tombstones must match the cloud before the outbox clears', asyn
   h.writeDraft(client);
   await h.api.flushOutbox();
   assert.equal(Object.keys(h.api.readOutbox()).length, 1);
+});
+
+test('deletion clears the queued and recovery records without requeuing the deleted record', () => {
+  const h = harness(async () => { throw new Error('No network call expected'); });
+  const record = entryRecord();
+  h.writeDraft(record);
+  const backupKey = 'cash_balance_app_recovery_v1';
+  assert.ok(h.api.readOutbox()[record.id]);
+  assert.equal(JSON.parse(h.localStorage.getItem(backupKey)).record.id, record.id);
+  h.api.forgetDeletedRecord(record.id);
+  assert.equal(h.api.readOutbox()[record.id], undefined);
+  assert.equal(h.localStorage.getItem(backupKey), '');
+  h.window.__cashDeletingRecordId = record.id;
+  h.writeDraft(record);
+  assert.equal(h.api.readOutbox()[record.id], undefined);
 });

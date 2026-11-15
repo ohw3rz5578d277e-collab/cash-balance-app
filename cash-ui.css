@@ -1,0 +1,236 @@
+/* Mobile presentation for the settlement screens. The POS styles stay in index.html. */
+body:not(.pos-active) {
+  --cash-ink: #142637;
+  --cash-muted: #516378;
+  --cash-line: #dbe3ea;
+  --cash-blue: #244e79;
+  --cash-green: #14694f;
+  background: #f1f4f6;
+  color: var(--cash-ink);
+}
+body:not(.pos-active) .top { background: #f1f4f6; z-index: 85 }
+body:not(.pos-active) .topcard {
+  padding: 10px 12px;
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--cash-line);
+  border-radius: 14px;
+  box-shadow: none;
+}
+body:not(.pos-active) .brand {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+}
+body:not(.pos-active) .brand > div:first-child { grid-column: 1; grid-row: 1 }
+body:not(.pos-active) .brand h1 { font-size: 18px; line-height: 1.25 }
+body:not(.pos-active) .brand .lead { color: var(--cash-muted); font-size: 11px }
+body:not(.pos-active) #statusText {
+  grid-column: 1;
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+body:not(.pos-active) #cb-menu-button {
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  width: auto;
+  min-width: 76px;
+  height: 44px;
+  border: 1px solid var(--cash-line);
+  border-radius: 11px;
+  background: #f5f8fa;
+  box-shadow: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+body:not(.pos-active) #cb-menu-panel {
+  position: absolute;
+  inset: calc(100% + 5px) 0 auto auto;
+  width: min(280px, 100%);
+  max-height: 68dvh;
+  overflow-y: auto;
+}
+body:not(.pos-active) .cb-menu-item { min-height: 44px }
+body:not(.pos-active) .wrap { padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px)) }
+body:not(.pos-active) .panel {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--cash-line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: none;
+}
+body:not(.pos-active) .panel h2 { color: var(--cash-ink); font-size: 17px; line-height: 1.35 }
+body:not(.pos-active) .help { color: var(--cash-muted); font-size: 12px; line-height: 1.5 }
+body:not(.pos-active) .head { gap: 8px; align-items: flex-start }
+body:not(.pos-active) .head > div:first-child { min-width: 0 }
+body:not(.pos-active) .panel :is(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+body:not(.pos-active) .panel :is(input, textarea) { background: #f9fbfc }
+body:not(.pos-active) .panel :is(input[type="date"], input[type="time"]) {
+  -webkit-appearance: none;
+  appearance: none;
+}
+body:not(.pos-active) .panel :is(button, summary) { min-height: 44px }
+body:not(.pos-active) .panel summary { cursor: pointer }
+body:not(.pos-active) :is(a,button,summary,input,textarea,select):focus-visible {
+  outline: 2px solid #23709e;
+  outline-offset: 2px;
+}
+body:not(.pos-active) .view [id] { scroll-margin-top: 132px }
+
+#view-home.active { display: grid; gap: 11px }
+#view-home.active > .panel { margin: 0 }
+#view-home [hidden] { display: none !important }
+#view-home > #attendanceHomePanel { order: -2; display: grid; border-top: 3px solid #288467 }
+#view-home > #cbHomeSummary { order: -1 }
+#view-home > #bankDepositHomeAlert { order: 0 }
+
+#attendanceHomePanel #attDetail {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  padding: 0 12px;
+  border: 1px solid #cfe1dc;
+  border-radius: 10px;
+  background: #f0f8f4;
+  color: #145f4a;
+  font-weight: 800;
+  white-space: nowrap;
+}
+#attendanceHomePanel .att-stats {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 6px;
+  margin: 9px 0 0;
+}
+#attendanceHomePanel .att-stat { min-width: 0; padding: 8px 2px; background: #f0f5f4; color: #4e675d }
+#attendanceHomePanel .att-stat b { color: var(--cash-ink); font-size: 13px; overflow-wrap: anywhere }
+#attendanceHomePanel .att-stat:first-child b { color: var(--cash-green) }
+#attendanceHomePanel .att-actions { order: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 9px }
+#attendanceHomePanel .att-btn { display: flex; justify-content: center; align-items: center; gap: 7px; min-height: 46px; padding: 4px; border-radius: 10px; font-size: 13px }
+#attendanceHomePanel .att-btn span { margin: 0; font-size: 14px }
+#attendanceHomePanel .att-btn.break:not(:disabled) { background: #14694f; border-color: #14694f; color: #fff }
+#attendanceHomePanel .att-btn:disabled { background: #f4f6f8; border-color: #e1e8ed; color: #5e6e7b; opacity: 1 }
+#attendanceHomePanel .att-sync { margin-top: 3px; font-weight: 800 }
+
+#cbHomeSummary.cash-sales-summary { border-color: #cfddec }
+.cb-home-kpis { display: grid; grid-template-columns: 1fr 1fr; margin: 12px 0 6px; gap: 12px }
+.cb-home-kpis > div { min-width: 0 }
+.cb-home-kpis > div + div { border-left: 1px solid #dbe3ea; padding-left: 12px }
+.cb-home-kpis span { display: block; color: #516378; font-size: 12px; font-weight: 700 }
+.cb-home-kpis b { display: block; color: #244e79; font-size: clamp(17px, 6.2vw, 27px); line-height: 1.25; overflow-wrap: anywhere; font-variant-numeric: tabular-nums }
+.cb-home-kpis > div + div b { color: #14694f }
+.cash-sales-actions,.cash-settle-actions,.cash-record-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 9px }
+.cash-sales-actions .btn { font-size: 13px; padding: 6px }
+.cash-sales-actions .darkbtn { background: #244e79 }
+.cash-route-list { border: 1px solid #dbe3ea; border-radius: 11px; margin-top: 10px }
+.cash-route-list button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  width: 100%;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  padding: 7px 9px;
+  color: #142637;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.cash-route-list button + button { border-top: 1px solid #dbe3ea }
+.cash-route-list button small { margin-left: auto; color: #516378; font-size: 10px; text-align: right }
+.cash-route-list button::after { content: "›"; margin-left: 3px; color: #244e79; font-size: 20px; line-height: 1 }
+
+.cash-basic-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px }
+.cash-basic-fields > div { min-width: 0 }
+.cash-basic-fields .cash-wide { grid-column: 1 / -1 }
+#cashUberRoute { display: flex; justify-content: space-between; align-items: center; gap: 8px }
+#cashUberRoute span { display: block; color: #516378; font-size: 12px; font-weight: 700 }
+#cashUberValue { font-weight: 800 }
+#cashUberRoute button,#cashTodayPanel .head button { padding: 6px 8px; font-size: 12px }
+#cashRecordsPanel #historyDetails { margin: 12px 0 }
+#cashRecordsPanel summary,#cashHelp summary { display: flex; align-items: center; color: #142637; font-weight: 800 }
+#cashRecordsPanel summary::after,#cashHelp summary::after { content: "▾"; margin-left: auto; color: #516378 }
+#cashRecordsPanel details[open] > summary::after,#cashHelp[open] > summary::after { content: "▴" }
+#cashRecordsPanel .btn { padding: 6px 8px; font-size: 13px }
+#cashRecordsPanel #logoutButton { width: 100%; margin-top: 4px }
+#view-home > #cbSettlement { border-color: #e4d8ca; background: #fffcf7 }
+#view-home #cbSettlement :is(.cb-settle-item,.cb-settle-diff) { background: #f7efe3 }
+#cbSettlement :is(.cb-settle-item,.cb-settle-diff) b { overflow-wrap: anywhere }
+
+:is(#view-start,#view-end) .mrow {
+  grid-template-columns: minmax(0, 1fr) 44px minmax(44px, 62px) 44px;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid #e2eaf0;
+  border-radius: 11px;
+}
+:is(#view-start,#view-end) .cbtn {
+  width: 44px;
+  min-height: 44px;
+  background: #eaf1f7;
+  color: #244e79;
+  border: 1px solid #d3e1ec;
+  border-radius: 9px;
+}
+:is(#view-start,#view-end) .cbtn[data-act="plus"] { background: #244e79; color: white; border-color: #244e79 }
+:is(#view-start,#view-end) .cinput { width: 100%; padding: 4px; text-align: center }
+:is(#view-start,#view-end) .total { align-self: flex-start; background: #edf4fb; color: #244e79; white-space: normal }
+:is(#view-sales,#view-analysis) .salesPanel { background: #fff; border-color: #cfddec }
+:is(#salesPeriodCards,#analysisCards) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px }
+:is(#salesPeriodCards,#analysisCards) .salesCard { min-width: 0; border-radius: 11px }
+:is(#salesPeriodCards,#analysisCards) .value { overflow-wrap: anywhere; font-variant-numeric: tabular-nums }
+#view-sales .salesInputGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+#view-sales .salesInputGrid > :last-child { grid-column: 1 / -1 }
+#view-attendance .panel { border-color: #cddfd7 }
+#view-attendance :is(.att-all-edit,.att-edit) { gap: 6px }
+#view-attendance #attendanceAllHistory .att-all-edit { grid-template-columns: repeat(2,minmax(0,1fr)) }
+#view-attendance #attendanceAllHistory .att-all-edit :is(select,input,button) { grid-column: auto; width: 100% }
+#view-attendance :is(.att-add-day,.att-save-day,.att-all-add,.att-all-save) { border-radius: 10px }
+#view-analysis .cb-filter { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px }
+#view-analysis .cb-filter > :first-child,#view-analysis #analysisApply { grid-column: 1 / -1 }
+#view-analysis #analysisApply { background: #244e79; color: #fff; border-radius: 10px }
+#view-analysis .cb-chart { padding: 10px; border-radius: 11px }
+#view-analysis .cb-combo-wrap { max-width: 100%; overflow-x: auto }
+
+@media (max-width: 370px) {
+  body:not(.pos-active) .wrap { padding-inline: 8px }
+  body:not(.pos-active) .panel { padding: 11px }
+  .cash-route-list button { font-size: 12px }
+  #view-sales .salesInputGrid { grid-template-columns: 1fr }
+}
+
+body:not(.pos-active) .cb-custom-nav-grid { grid-template-columns: repeat(7,minmax(0,1fr)); gap: 3px }
+body:not(.pos-active) .cb-nav-btn {
+  min-width: 0;
+  min-height: 48px;
+  padding-inline: 0;
+  border-color: transparent;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+body:not(.pos-active) .cb-nav-btn.active { background: #162f42; color: white }
+#cbSettlement .cb-settle-item b { white-space: normal }
+
+.cash-sales-date { display: grid; gap: 6px; margin: 10px 0 }
+.cash-sales-date-nav { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px }
+.cash-sales-date-nav .btn { padding: 5px; white-space: nowrap }
+#cashSalesDateStatus { min-height: 1.4em; color: #516378 }
+#view-sales #cashSalesFields { grid-template-columns: minmax(0,1fr) }
+#view-sales.sales-date-blocked :is(#cashSalesFields,#dailySalesPreview) { visibility: hidden }
+#cashSalesDateRetry[hidden] { display: none }

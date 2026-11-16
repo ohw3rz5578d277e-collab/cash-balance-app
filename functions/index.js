@@ -20,31 +20,217 @@ function yen(n){return '¥'+Math.round(Number(n||0)).toLocaleString('ja-JP')}
 function draftBox(){try{return JSON.parse(localStorage.getItem(DRAFTKEY)||'{}')||{}}catch(e){return{}}}
 function draftState(){var b=draftBox();return b&&b.state?b.state:null}
 function readOutbox(){try{var x=JSON.parse(localStorage.getItem(OUTBOXKEY)||'{}');return x&&typeof x==='object'?x:{}}catch(e){return{}}}
-function writeOutbox(x){try{nativeSetItem.call(localStorage,OUTBOXKEY,JSON.stringify(x||{}))}catch(e){}}
+function writeOutbox(x){
+  try{nativeSetItem.call(localStorage,OUTBOXKEY,JSON.stringify(x||{}));return true}
+  catch(e){return false}
+}
 function outboxCount(){return Object.keys(readOutbox()).length}
 function saveRecovery(r){if(!r||!r.id)return;try{nativeSetItem.call(localStorage,BACKUPKEY,JSON.stringify({record:r,savedAt:new Date().toISOString()}))}catch(e){}}
 function restoreRecovery(){try{var x=JSON.parse(localStorage.getItem(BACKUPKEY)||'null'),r=x&&x.record;if(!r||!r.id)return;var box=readOutbox(),id=String(r.id);if(!box[id]){box[id]={record:r,signature:recordSignature(r),queuedAt:x.savedAt||new Date().toISOString(),attempts:0};writeOutbox(box)}}catch(e){}}
 function clearRecoveryIfSynced(r){try{var x=JSON.parse(localStorage.getItem(BACKUPKEY)||'null'),b=x&&x.record;if(b&&r&&String(b.id)===String(r.id)&&recordSignature(b)===recordSignature(r))nativeSetItem.call(localStorage,BACKUPKEY,'')}catch(e){}}
 function recordSignature(r){return [String(r&&r.updatedAt||''),syncComparable(r)].join('|')}
-function setSaveStatus(ok,text){var el=document.getElementById('statusText');if(!el)return;el.textContent=text;if(ok)el.classList.add('ok');else el.classList.remove('ok')}
-function localPendingText(){return outboxCount()?'端末保存済み・クラウド同期待ち':'端末保存済み'}
-function queueRecord(r,immediate){if(!r||!r.id)return;saveRecovery(r);var box=readOutbox();box[String(r.id)]={record:JSON.parse(JSON.stringify(r)),signature:recordSignature(r),queuedAt:new Date().toISOString(),attempts:0};writeOutbox(box);setSaveStatus(false,localPendingText());if(Date.now()>=cloudPausedUntil)scheduleFlush(immediate?0:250)}
+function pendingSaveLabel(){
+  var entries=Object.values(readOutbox());
+  if(!entries.length)return '';
+  var confirmations=entries.filter(function(entry){return entry&&entry.confirmationPending}).length;
+  var sending=entries.length-confirmations;
+  var parts=[];
+  if(sending)parts.push('クラウド同期待ち '+sending+'件');
+  if(confirmations)parts.push('クラウド確認待ち '+confirmations+'件');
+  return parts.join('・');
+}
+window.__cashPendingSaveLabel=pendingSaveLabel;
+window.__cashPendingSalesStatus=function(id,date){
+  var box=readOutbox(),entry=box[String(id)];
+  return {
+    record:!entry?'':entry.confirmationPending?'端末保存済み・クラウド確認待ち':'端末保存済み・クラウド同期待ち',
+    otherCount:Object.keys(box).filter(function(key){
+      return key!==String(id)&&box[key]&&box[key].record&&box[key].record.date===date;
+    }).length
+  };
+};
+window.__cashRefreshPendingSaves=function(){scheduleFlush(0)};
+function setSaveStatus(ok,text){
+  var el=document.getElementById('statusText');
+  if(!el)return;
+  var label=pendingSaveLabel()||text;
+  if(el.textContent!==label)el.textContent=label;
+  if(ok)el.classList.add('ok');else el.classList.remove('ok');
+  try{window.dispatchEvent(new CustomEvent('cash-save-state-changed'))}catch(e){}
+}
+function localPendingText(){return pendingSaveLabel()||'端末保存済み'}
+function queueRecord(r,immediate){
+  if(!r||!r.id)return;
+  var box=readOutbox(),id=String(r.id),existing=box[id];
+  if(existing&&existing.confirmationPending&&existing.record&&
+    recordSignature(existing.record)===recordSignature(r))return true;
+  saveRecovery(r);
+  box[id]={record:JSON.parse(JSON.stringify(r)),signature:recordSignature(r),queuedAt:new Date().toISOString(),attempts:0};
+  if(!writeOutbox(box))return false;
+  setSaveStatus(false,localPendingText());
+  if(Date.now()>=cloudPausedUntil)scheduleFlush(immediate?0:250);
+  return true;
+}
+window.__cashQueueCurrentRecord=function(id){
+  var record=draftState();
+  return !!(record&&String(record.id)===String(id)&&queueRecord(record,true));
+};
 function forgetDeletedRecord(id){if(!id)return;id=String(id);var box=readOutbox();if(box[id]){delete box[id];writeOutbox(box)}try{var x=JSON.parse(localStorage.getItem(BACKUPKEY)||'null'),r=x&&x.record;if(r&&String(r.id)===id)nativeSetItem.call(localStorage,BACKUPKEY,'')}catch(e){}}
 window.__cashForgetDeletedRecord=forgetDeletedRecord;
 function scheduleFlush(ms){clearTimeout(flushTimer);flushTimer=setTimeout(flushOutbox,Math.max(0,ms||0))}
-function syncComparable(r){return JSON.stringify({id:r&&r.id,date:r&&r.date,dailySales:r&&r.dailySales,salesMemo:String(r&&r.salesMemo||''),counts:r&&r.counts||{},startTime:r&&r.startTime,endTime:r&&r.endTime,posItems:Array.isArray(r&&r.posItems)?r.posItems:[],gasItems:Array.isArray(r&&r.gasItems)?r.gasItems:[],attendanceLogs:Array.isArray(r&&r.attendanceLogs)?r.attendanceLogs:[],attendanceDeletedIds:Array.isArray(r&&r.attendanceDeletedIds)?r.attendanceDeletedIds:[],uberPending:r&&r.uberPending,bankDepositActual:r&&r.bankDepositActual,bankDepositAutoTarget:r&&r.bankDepositAutoTarget,bankDepositKeep:r&&r.bankDepositKeep,bankDepositSpent:r&&r.bankDepositSpent,bankDepositPeriodStart:r&&r.bankDepositPeriodStart,bankDepositPeriodEnd:r&&r.bankDepositPeriodEnd})}
-function itemsSafelyMerged(client,server,clientTime,allowServerRetained){var old=Array.isArray(client)?client:[],updated=Array.isArray(server)?server:[],unused=updated.slice();for(var i=0;i<old.length;i++){var item=old[i],index=unused.findIndex(function(x){return JSON.stringify(x)===JSON.stringify(item)});if(index<0)return false;unused.splice(index,1)}return unused.every(function(x){if(allowServerRetained)return true;var at=Date.parse(String(x&&x.createdAt||x&&x.created_at||''));return Number.isFinite(at)&&at>clientTime})}
-function safeServerAdditions(client,server,allowServerRetained){if(!client||!server||String(client.id)!==String(server.id))return false;var at=Date.parse(String(client.updatedAt||''));if(!Number.isFinite(at))return false;var blank=function(r){return Object.assign({},r,{attendanceLogs:[],posItems:[],gasItems:[]})};if(syncComparable(blank(client))!==syncComparable(blank(server)))return false;return ['attendanceLogs','posItems','gasItems'].every(function(k){return itemsSafelyMerged(client[k],server[k],at,allowServerRetained&&k==='attendanceLogs')})}
+function canonicalRecordValue(value){
+  if(Array.isArray(value))return value.map(canonicalRecordValue);
+  if(!value||typeof value!=='object')return value;
+  var sorted=Object.create(null);
+  Object.keys(value).sort().forEach(function(key){sorted[key]=canonicalRecordValue(value[key])});
+  return sorted;
+}
+
+function deletedAttendanceIds(record){
+  var ids=Array.isArray(record.attendanceDeletedIds)?record.attendanceDeletedIds:[];
+  return Array.from(new Set(ids.map(String).filter(Boolean))).sort();
+}
+
+function syncComparable(record){
+  var r=record||{};
+  return JSON.stringify(canonicalRecordValue({
+    id:r.id,date:r.date,dailySales:r.dailySales,salesMemo:String(r.salesMemo||''),
+    memo:String(r.memo||''),counts:r.counts||{},startTime:r.startTime,endTime:r.endTime,
+    posItems:Array.isArray(r.posItems)?r.posItems:[],
+    gasItems:Array.isArray(r.gasItems)?r.gasItems:[],
+    attendanceLogs:Array.isArray(r.attendanceLogs)?r.attendanceLogs:[],
+    attendanceDeletedIds:deletedAttendanceIds(r),uberPending:r.uberPending,
+    bankDepositActual:r.bankDepositActual,bankDepositAutoTarget:r.bankDepositAutoTarget,
+    bankDepositKeep:r.bankDepositKeep,bankDepositSpent:r.bankDepositSpent,
+    bankDepositPeriodStart:r.bankDepositPeriodStart,bankDepositPeriodEnd:r.bankDepositPeriodEnd,
+    uberCashOrderCount:r.uberCashOrderCount
+  }));
+}
+
+function itemsSafelyMerged(client,server,clientTime,allowServerRetained){
+  var old=Array.isArray(client)?client:[],updated=Array.isArray(server)?server:[];
+  var unused=updated.map(function(item){return {item:item,key:JSON.stringify(canonicalRecordValue(item))}});
+  for(var i=0;i<old.length;i++){
+    var key=JSON.stringify(canonicalRecordValue(old[i]));
+    var index=unused.findIndex(function(entry){return entry.key===key});
+    if(index<0)return false;
+    unused.splice(index,1);
+  }
+  return unused.every(function(entry){
+    if(allowServerRetained)return true;
+    var item=entry.item,at=Date.parse(String(item&&item.createdAt||item&&item.created_at||''));
+    return Number.isFinite(at)&&at>clientTime;
+  });
+}
+
+function safeServerAdditions(client,server,allowServerRetained){
+  if(!client||!server||String(client.id)!==String(server.id))return false;
+  var at=Date.parse(String(client.updatedAt||''));
+  var clientDeletes=deletedAttendanceIds(client),serverDeletes=deletedAttendanceIds(server);
+  if(clientDeletes.some(function(id){return !serverDeletes.includes(id)}))return false;
+  var localPunches=Array.isArray(client.attendanceLogs)?client.attendanceLogs:[];
+  if(localPunches.some(function(punch){return punch&&serverDeletes.includes(String(punch.id))}))return false;
+  var blank=function(r){return Object.assign({},r,{attendanceLogs:[],attendanceDeletedIds:[],posItems:[],gasItems:[]})};
+  if(syncComparable(blank(client))!==syncComparable(blank(server)))return false;
+  return ['attendanceLogs','posItems','gasItems'].every(function(k){
+    return itemsSafelyMerged(client[k],server[k],at,allowServerRetained&&k==='attendanceLogs');
+  });
+}
 function adoptServerAdditions(id,expected,server){var b=draftBox(),cur=b&&b.state;if(!cur||String(cur.id)!==String(id))return true;if(recordSignature(cur)!==recordSignature(expected))return false;b.state=server;b.updatedAt=server.updatedAt||new Date().toISOString();try{nativeSetItem.call(localStorage,DRAFTKEY,JSON.stringify(b));var saved=draftState();if(!saved||syncComparable(saved)!==syncComparable(server))return false}catch(e){return false}try{window.dispatchEvent(new CustomEvent('cash-attendance-saved',{detail:{recordId:String(id)}}))}catch(e){}return true}
 
 async function verifyCloudRecord(r){var remote=await fetchRecord(r&&r.id);return !!remote&&syncComparable(remote)===syncComparable(r)}
 async function postRecord(r,keepalive){var pin=localStorage.getItem(PINKEY)||'';if(!pin)throw new Error('PINなし');var res=await fetch(API,{method:'POST',cache:'no-store',keepalive:!!keepalive,headers:{'content-type':'application/json','x-app-pin':pin},body:JSON.stringify({record:r})});var data=await res.json().catch(function(){return{}});if(!res.ok||data.ok===false){var e=new Error(data.error||('保存エラー '+res.status));e.status=res.status;throw e}return data}
-async function flushOutbox(){if(flushBusy)return;if(Date.now()<cloudPausedUntil){setSaveStatus(false,localPendingText());return}var pin=localStorage.getItem(PINKEY)||'';if(!pin)return;var box=readOutbox(),ids=Object.keys(box),retryImmediately=false,retryDelay=200;if(!ids.length){retryStep=0;setSaveStatus(true,'同期済み');return}flushBusy=true;setSaveStatus(false,'保存中…');try{for(var i=0;i<ids.length;i++){var id=ids[i],entry=box[id];if(!entry||!entry.record)continue;var saved=await postRecord(entry.record,false),serverRecord=saved&&saved.record,verified=!!serverRecord&&syncComparable(serverRecord)===syncComparable(entry.record),merged=!verified&&!!saved&&(saved.staleMerge===true||saved.attendanceProtection==='retained_existing_logs')&&safeServerAdditions(entry.record,serverRecord,saved.attendanceProtection==='retained_existing_logs');var latest=readOutbox(),now=latest[id];if((verified||merged)&&now&&now.signature===entry.signature){if(merged&&!adoptServerAdditions(id,entry.record,serverRecord)){setSaveStatus(false,'端末保存済み・別端末データの確認待ち');retryDelay=60000;break}delete latest[id];writeOutbox(latest);clearRecoveryIfSynced(entry.record);try{window.dispatchEvent(new CustomEvent('cash-record-synced',{detail:{recordId:String(id)}}))}catch(e){}dataCheckCache=serverRecord;dataCheckAt=Date.now()}else if(!verified){if(now&&now.signature!==entry.signature){setSaveStatus(false,'端末保存済み・最新の変更を再送します');retryImmediately=true;break}setSaveStatus(false,'端末保存済み・クラウド確認待ち');scheduleFlush(60000);break}}retryStep=0;if(outboxCount()===0)setSaveStatus(true,'同期済み');else scheduleFlush(retryImmediately?0:retryDelay)}catch(e){var quota=/D1_ERROR|row read limit|free tier/i.test(String(e&&e.message||''));if(quota){cloudPausedUntil=Date.now()+30*60*1000;retryStep=0;setSaveStatus(false,localPendingText());scheduleFlush(30*60*1000)}else{retryStep=Math.min(retryStep+1,4);var waits=[3000,10000,30000,60000,300000];setSaveStatus(false,localPendingText());scheduleFlush(waits[retryStep-1]||300000)}}finally{flushBusy=false}}
-function emergencyFlush(){var current=draftState();if(current)saveRecovery(current);if(Date.now()<cloudPausedUntil)return;var box=readOutbox(),ids=Object.keys(box);if(!ids.length)return;ids.slice(0,3).forEach(function(id){var e=box[id];if(e&&e.record)postRecord(e.record,true).catch(function(){})})}
+async function flushOutbox(){
+  if(flushBusy)return;
+  var remainingPause=cloudPausedUntil-Date.now();
+  if(remainingPause>0){setSaveStatus(false,localPendingText());scheduleFlush(remainingPause);return}
+  var pin=localStorage.getItem(PINKEY)||'';
+  if(!pin)return;
+  var box=readOutbox(),ids=Object.keys(box).sort(function(a,b){
+    return Number(!!box[a]?.confirmationPending)-Number(!!box[b]?.confirmationPending);
+  });
+  if(!ids.length){retryStep=0;setSaveStatus(true,'同期済み');return}
+  flushBusy=true;
+  setSaveStatus(false,'保存中…');
+  var retryDelay=200,hasConflict=false;
+  try{
+    for(var i=0;i<ids.length;i++){
+      var id=ids[i],entry=box[id];
+      if(!entry||!entry.record)continue;
+      var currentBefore=readOutbox()[id];
+      if(!currentBefore||!currentBefore.record||recordSignature(currentBefore.record)!==recordSignature(entry.record)){
+        retryDelay=0;
+        continue;
+      }
+      // Once a differing response is recorded, retry confirmation by reading the server only.
+      var saved=entry.confirmationPending
+        ?{record:await fetchRecord(id),attendanceProtection:'retained_existing_logs'}
+        :await postRecord(entry.record,false);
+      var serverRecord=saved&&saved.record;
+      var exact=!!serverRecord&&syncComparable(serverRecord)===syncComparable(entry.record);
+      var canMerge=!!saved&&(saved.staleMerge===true||saved.attendanceProtection==='retained_existing_logs');
+      var merged=!exact&&canMerge&&safeServerAdditions(entry.record,serverRecord,saved.attendanceProtection==='retained_existing_logs');
+      var latest=readOutbox(),now=latest[id];
+      if(!now||!now.record||recordSignature(now.record)!==recordSignature(entry.record)){
+        retryDelay=0;
+        continue;
+      }
+      if((!exact&&!merged)||(merged&&!adoptServerAdditions(id,entry.record,serverRecord))){
+        if(!now.confirmationPending){
+          now.confirmationPending=true;
+          writeOutbox(latest);
+        }
+        hasConflict=true;
+        continue;
+      }
+      delete latest[id];
+      writeOutbox(latest);
+      clearRecoveryIfSynced(entry.record);
+      try{window.dispatchEvent(new CustomEvent('cash-record-synced',{detail:{recordId:String(id)}}))}catch(e){}
+      dataCheckCache=serverRecord;
+      dataCheckAt=Date.now();
+    }
+    retryStep=0;
+    if(outboxCount()===0)setSaveStatus(true,'同期済み');
+    else{
+      setSaveStatus(false,hasConflict?'端末保存済み・クラウド確認待ち':localPendingText());
+      scheduleFlush(hasConflict&&retryDelay>0?60000:retryDelay);
+    }
+  }catch(e){
+    var quota=/D1_ERROR|row read limit|free tier/i.test(String(e&&e.message||''));
+    if(quota){
+      cloudPausedUntil=Date.now()+30*60*1000;
+      retryStep=0;
+      setSaveStatus(false,localPendingText());
+      scheduleFlush(30*60*1000);
+    }else{
+      retryStep=Math.min(retryStep+1,4);
+      var waits=[3000,10000,30000,60000];
+      setSaveStatus(false,localPendingText());
+      scheduleFlush(waits[retryStep-1]);
+    }
+  }finally{flushBusy=false}
+}
+
+window.__cashRetryPendingRecord=function(id){
+  if(!id||!readOutbox()[String(id)])return false;
+  scheduleFlush(0);
+  return true;
+};
+
+function emergencyFlush(){
+  if(flushBusy||Date.now()<cloudPausedUntil)return;
+  var box=readOutbox();
+  Object.keys(box).slice(0,3).forEach(function(id){
+    var entry=box[id];
+    if(entry&&entry.record&&!entry.confirmationPending)postRecord(entry.record,true).catch(function(){});
+  });
+}
+
 var nativeSetItem=Storage.prototype.setItem;
 window.__cashWriteReadOnlyDraft=function(value){nativeSetItem.call(localStorage,DRAFTKEY,value);};
 if(!window.__cashSaveGuardInstalled){window.__cashSaveGuardInstalled=true;Storage.prototype.setItem=function(key,value){nativeSetItem.call(this,key,value);if(this!==localStorage||key!==DRAFTKEY)return;try{var parsed=JSON.parse(value||'{}'),r=parsed&&parsed.state;if(!r||!r.id)return;if(window.__cashDeletingRecordId&&String(r.id)===String(window.__cashDeletingRecordId))return;var count=Array.isArray(r.posItems)?r.posItems.length:0;var posAdded=lastPosCount>=0&&count>lastPosCount;lastPosCount=count;diagnosisCache=null;queueRecord(r,posAdded)}catch(e){}}}
-function seedCurrentDraft(){restoreRecovery();var r=draftState();if(!r)return;saveRecovery(r);lastPosCount=Array.isArray(r.posItems)?r.posItems.length:0;if(outboxCount())scheduleFlush(0)}
+function seedCurrentDraft(){restoreRecovery();var r=draftState();if(!r)return;lastPosCount=Array.isArray(r.posItems)?r.posItems.length:0;if(outboxCount())scheduleFlush(0)}
 function ensureDataCheckStyle(){if(document.getElementById('cbDataCheckStyle'))return;var s=document.createElement('style');s.id='cbDataCheckStyle';s.textContent='.cb-data-check{border:1px solid #dbe3ee}.cb-check-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.cb-check{padding:10px;border-radius:12px;background:#f8fafc;font-size:11px;color:#64748b}.cb-check b{display:block;font-size:13px;color:#111827;margin-bottom:3px}.cb-check.ok{background:#ecfdf5}.cb-check.warn{background:#fff7ed}.cb-settle-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.cb-settle-item{padding:9px 7px;border-radius:12px;background:#f8fafc;min-width:0}.cb-settle-item span{display:block;font-size:9px;color:#64748b;margin-bottom:3px}.cb-settle-item b{font-size:13px;white-space:nowrap}.cb-settle-item.bad{background:#fef2f2}.cb-settle-item.bad b{color:#dc2626}.cb-settle-diff{margin-top:8px;padding:10px 12px;border-radius:12px;background:#fff1f2;display:flex;justify-content:space-between;font-weight:950}.cb-period-fold{border:1px solid #e5e7eb;border-radius:16px;background:#fff;padding:0!important}.cb-period-fold summary{list-style:none;padding:14px;font-weight:950;cursor:pointer;display:flex;justify-content:space-between;align-items:center}.cb-period-fold summary:after{content:\'開く\';font-size:10px;color:#64748b}.cb-period-fold[open] summary:after{content:\'閉じる\'}.cb-period-fold summary::-webkit-details-marker{display:none}.cb-period-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 14px 14px}.cb-period-box{padding:11px;border-radius:12px;background:#f8fafc}.cb-period-box span{display:block;font-size:10px;color:#64748b}.cb-period-box b{display:block;font-size:15px;margin-top:4px}@media(max-width:430px){.cb-settle-grid{grid-template-columns:repeat(2,1fr)}.cb-check-grid{grid-template-columns:1fr}.cb-check{display:flex;justify-content:space-between;gap:8px;align-items:center}.cb-check b{margin:0}#cbTodayDataCheck .head .help{display:none}}';document.head.appendChild(s)}
 function itemKey(x){return String(x&&x.id||'')||[String(x&&x.time||''),money(x&&x.sale),money(x&&x.tip),money(x&&x.change)].join('|')}
 function homeCalc(r){var pos=Array.isArray(r&&r.posItems)?r.posItems:[],gas=Array.isArray(r&&r.gasItems)?r.gasItems:[],ps=pos.reduce(function(s,x){return s+money(x&&x.sale)},0),tip=countTips(r),gc=gas.reduce(function(s,x){return s+money(x&&x.cost)},0),start=countSection(r,'start'),end=countSection(r,'end'),expected=start+ps+countSection(r,'received')+tip+countSection(r,'exchange')-gc-signed(r&&r.uberPending);return{start:start,pos:ps,tip:tip,cash:ps+tip,gas:gc,bank:signed(r&&r.uberPending),end:end,expected:expected,diff:end-expected}}
@@ -88,7 +274,7 @@ function renderHomeSummary(){
   adjustment.textContent=amount===0&&r.bankDepositActual==null?'未入力':yen(Math.abs(amount))+(amount<0?' 支払い予定':'');
 }
 
-async function renderDataCheck(){var home=document.getElementById('view-home'),r=draftState();if(!home||!r)return;ensureDataCheckStyle();var p=document.getElementById('cbTodayDataCheck');if(!p){p=document.createElement('section');p.id='cbTodayDataCheck';p.className='panel cb-data-check';p.hidden=true;document.getElementById('cashTodayPanel').insertAdjacentElement('afterend',p)}var pending=outboxCount(),pos=Array.isArray(r.posItems)?r.posItems.length:0,att=Array.isArray(r.attendanceLogs)?r.attendanceLogs.length:0,bankReady=!!(r.bankDepositPeriodStart&&r.bankDepositPeriodEnd),pin=localStorage.getItem(PINKEY)||'';var cloud=Date.now()<cloudPausedUntil?'クラウド制限中・端末保存で継続できます':'確認中…',cloudOk=false;if(pin&&r.id&&Date.now()>=cloudPausedUntil){try{var hit=null,now=Date.now();if(dataCheckCache&&String(dataCheckCache.id)===String(r.id)&&now-dataCheckAt<60000){hit=dataCheckCache}else if(!dataCheckBusy){dataCheckBusy=true;try{hit=await fetchRecord(r.id);dataCheckCache=hit;dataCheckAt=Date.now()}finally{dataCheckBusy=false}}else if(dataCheckCache&&String(dataCheckCache.id)===String(r.id))hit=dataCheckCache;var current=draftState();if(!current||String(current.id)!==String(r.id)||recordSignature(current)!==recordSignature(r))return;if(hit&&String(hit.id)===String(r.id)){var lp=Array.isArray(hit.posItems)?hit.posItems.length:0,la=Array.isArray(hit.attendanceLogs)?hit.attendanceLogs.length:0;var localPos=Array.isArray(r.posItems)?r.posItems:[],remotePos=Array.isArray(hit.posItems)?hit.posItems:[],remoteKeys={};remotePos.forEach(function(x){remoteKeys[itemKey(x)]=1});var missing=localPos.filter(function(x){return !remoteKeys[itemKey(x)]});cloudOk=lp===pos&&la===att&&missing.length===0;if(missing.length){cloud='POS '+missing.length+'件を自動修復中';queueRecord(r,true);scheduleFlush(0)}else cloud=cloudOk?'D1の件数一致':'要再同期（POS '+lp+'/'+pos+'・勤怠 '+la+'/'+att+'）'}else cloud='D1未確認'}catch(e){cloud='通信確認待ち'}}p.innerHTML='<div class="head"><div><h2>今日のデータ確認</h2><div class="help">'+formatDate(r.date)+' / 入力漏れ・未同期をここで確認</div></div><div class="small">'+(pending?'未送信 '+pending+'件':'送信待ち 0件')+'</div></div><div class="cb-check-grid"><div class="cb-check '+(pending?'warn':'ok')+'"><b>保存状態</b><span>'+(pending?'未送信あり':'端末送信済み')+'</span></div><div class="cb-check '+(cloudOk?'ok':'warn')+'"><b>D1照合</b><span>'+cloud+'</span></div><div class="cb-check '+(pos?'ok':'warn')+'"><b>POS</b><span>'+pos+'件</span></div><div class="cb-check '+(att?'ok':'warn')+'"><b>勤怠</b><span>'+att+'件</span></div><div class="cb-check '+(bankReady?'ok':'warn')+'"><b>銀行入金期間</b><span>'+(bankReady?'設定済み':'未設定')+'</span></div></div>'}
+async function renderDataCheck(){var home=document.getElementById('view-home'),r=draftState();if(!home||!r)return;ensureDataCheckStyle();var p=document.getElementById('cbTodayDataCheck');if(!p){p=document.createElement('section');p.id='cbTodayDataCheck';p.className='panel cb-data-check';p.hidden=true;document.getElementById('cashTodayPanel').insertAdjacentElement('afterend',p)}var pending=outboxCount(),pos=Array.isArray(r.posItems)?r.posItems.length:0,att=Array.isArray(r.attendanceLogs)?r.attendanceLogs.length:0,bankReady=!!(r.bankDepositPeriodStart&&r.bankDepositPeriodEnd),pin=localStorage.getItem(PINKEY)||'';var cloud=Date.now()<cloudPausedUntil?'クラウド制限中・端末保存で継続できます':'確認中…',cloudOk=false;if(pin&&r.id&&Date.now()>=cloudPausedUntil){try{var hit=null,now=Date.now();if(dataCheckCache&&String(dataCheckCache.id)===String(r.id)&&now-dataCheckAt<60000){hit=dataCheckCache}else if(!dataCheckBusy){dataCheckBusy=true;try{hit=await fetchRecord(r.id);dataCheckCache=hit;dataCheckAt=Date.now()}finally{dataCheckBusy=false}}else if(dataCheckCache&&String(dataCheckCache.id)===String(r.id))hit=dataCheckCache;var current=draftState();if(!current||String(current.id)!==String(r.id)||recordSignature(current)!==recordSignature(r))return;if(hit&&String(hit.id)===String(r.id)){var lp=Array.isArray(hit.posItems)?hit.posItems.length:0,la=Array.isArray(hit.attendanceLogs)?hit.attendanceLogs.length:0;var localPos=Array.isArray(r.posItems)?r.posItems:[],remotePos=Array.isArray(hit.posItems)?hit.posItems:[],remoteKeys={};remotePos.forEach(function(x){remoteKeys[itemKey(x)]=1});var missing=localPos.filter(function(x){return !remoteKeys[itemKey(x)]});cloudOk=lp===pos&&la===att&&missing.length===0;if(missing.length){cloud='POS '+missing.length+'件を自動修復中';if(!readOutbox()[String(r.id)]?.confirmationPending){queueRecord(r,true);scheduleFlush(0)}}else cloud=cloudOk?'D1の件数一致':'要再同期（POS '+lp+'/'+pos+'・勤怠 '+la+'/'+att+'）'}else cloud='D1未確認'}catch(e){cloud='通信確認待ち'}}p.innerHTML='<div class="head"><div><h2>今日のデータ確認</h2><div class="help">'+formatDate(r.date)+' / 入力漏れ・未同期をここで確認</div></div><div class="small">'+(pending?'未送信 '+pending+'件':'送信待ち 0件')+'</div></div><div class="cb-check-grid"><div class="cb-check '+(pending?'warn':'ok')+'"><b>保存状態</b><span>'+(pending?'未送信あり':'端末送信済み')+'</span></div><div class="cb-check '+(cloudOk?'ok':'warn')+'"><b>D1照合</b><span>'+cloud+'</span></div><div class="cb-check '+(pos?'ok':'warn')+'"><b>POS</b><span>'+pos+'件</span></div><div class="cb-check '+(att?'ok':'warn')+'"><b>勤怠</b><span>'+att+'件</span></div><div class="cb-check '+(bankReady?'ok':'warn')+'"><b>銀行入金期間</b><span>'+(bankReady?'設定済み':'未設定')+'</span></div></div>'}
 function countSection(r,k){var c=r&&r.counts&&r.counts[k]?r.counts[k]:{};return DENOMS.reduce(function(s,d){return s+money(c[String(d)])*d},0)}
 function countTips(r){var a=Array.isArray(r&&r.posItems)?r.posItems:[],v=0;a.forEach(function(x){v+=money(x&&x.tip)});return v+countSection(r,'tips')}
 function difference(r){if(!r)return null;var end=countSection(r,'end');if(!(end>0||r.endTime))return null;var pos=Array.isArray(r.posItems)?r.posItems:[],gas=Array.isArray(r.gasItems)?r.gasItems:[];var sales=pos.reduce(function(s,x){return s+money(x&&x.sale)},0);var gasCost=gas.reduce(function(s,x){return s+money(x&&x.cost)},0);var expected=countSection(r,'start')+sales+countSection(r,'received')+countTips(r)+countSection(r,'exchange')-gasCost-signed(r.uberPending);return end-expected}

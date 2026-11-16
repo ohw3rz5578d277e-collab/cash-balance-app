@@ -26,10 +26,19 @@ function harness({rows = [], pending = {}, response = async () => ({records: []}
     'view-sales': {classList: {contains: () => true, toggle() {}}},
     cashSalesDateStatus: {},
     cashSalesDateRetry: {},
+    cashSalesSaveStatus: {},
+    cashSalesSaveRetry: {},
   };
   const original = record(today, 'today', 12480, 'today memo');
   const scope = {
-    window: {__cashSaveGuardInstalled: true}, API: '/api/records',
+    window: {
+      __cashSaveGuardInstalled: true,
+      __cashPendingSalesStatus: (id, date) => ({
+        record: id in pending ? '端末保存済み・クラウド確認待ち' : '',
+        otherCount: Object.values(pending).filter(row => row.id !== id && row.date === date).length,
+      }),
+      addEventListener() {},
+    }, API: '/api/records',
     state: original, pos: {}, records: rows.slice(), dirty: false, saving: false, autoTimer: 1,
     E: {salesDateMirror: {}, dailySales: {}, salesMemo: {}},
     byId: id => nodes[id],
@@ -61,6 +70,8 @@ test('loads a cached date and prefers its pending edits without posting or chang
   assert.deepEqual(h.saves, [true]);
   assert.deepEqual(h.visits, []);
   assert.equal(h.scope.E.dailySales.disabled, false);
+  assert.equal(h.nodes.cashSalesSaveStatus.textContent, '端末保存済み・クラウド確認待ち');
+  assert.equal(h.nodes.cashSalesSaveRetry.hidden, false);
 });
 
 test('an uncached date uses the exact date range and a confirmed empty date starts a blank record', async () => {
@@ -97,4 +108,14 @@ test('a failed read leaves the old record alone, blocks sales inputs and makes r
   assert.equal(h.scope.E.salesMemo.disabled, true);
   assert.equal(h.nodes.cashSalesDateRetry.hidden, false);
   assert.deepEqual(h.saves, []);
+});
+
+test('a previous date waiting for confirmation does not label a confirmed sale as pending', async () => {
+  const cached = record(yesterday, 'yesterday', 9000);
+  const h = harness({pending: {yesterday: cached}});
+  h.scope.salesConfirmedId = 'today';
+  h.scope.records.push(h.original);
+  await h.scope.selectSalesDate(today);
+  assert.equal(h.nodes.cashSalesSaveStatus.textContent, '表示中の売上はクラウド保存済み');
+  assert.equal(h.nodes.cashSalesSaveRetry.hidden, true);
 });

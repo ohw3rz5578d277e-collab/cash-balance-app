@@ -11,7 +11,10 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'functions/index.js'),
 const begin = source.indexOf('(function(){');
 const end = source.indexOf('function ensureDataCheckStyle(){', begin);
 assert.ok(begin > 0 && end > begin, 'find injected outbox helper boundaries');
-const exposed = source.slice(begin, end) +
+const readStart = source.indexOf('async function fetchRecord(');
+const readEnd = source.indexOf('function newest(', readStart);
+assert.ok(readStart>0&&readEnd>readStart,'find direct record read');
+const exposed = source.slice(begin, end) + source.slice(readStart, readEnd) +
   '\nwindow.__outboxTests = {queueRecord, flushOutbox, readOutbox, safeServerAdditions, forgetDeletedRecord};})();';
 
 const KEY = 'cash_balance_app_draft_v21';
@@ -40,7 +43,7 @@ function harness(reply) {
   let response = reply;
   const scheduled = [];
   const fetch = async (_, options) => ({
-    ok: true,
+    ok: true, status: 200,
     async json() { return await response(options); }
   });
   const sandbox = {
@@ -185,4 +188,44 @@ test('deletion clears the queued and recovery records without requeuing the dele
   h.window.__cashDeletingRecordId = record.id;
   h.writeDraft(record);
   assert.equal(h.api.readOutbox()[record.id], undefined);
+});
+
+test('a conflicting old record stays queued while a later sale syncs', async () => {
+  const old = {...entryRecord(), memo:'端末のメモ'};
+  const sale = {...entryRecord(), id:'rec-sale', date:'2026-11-16', dailySales:7200, attendanceLogs:[]};
+  const posts = [];
+  let remote = {...old, memo:'別端末のメモ'};
+  const h = harness(async options => {
+    if (!options.method) return {ok:true, records:[remote]};
+    const {record} = JSON.parse(options.body);
+    posts.push(record.id);
+    return {ok:true, record:record.id === old.id ? remote : record};
+  });
+  h.writeDraft(old);
+  h.writeDraft(sale);
+  await h.api.flushOutbox();
+  assert.deepEqual(posts, [old.id,sale.id]);
+  assert.equal(h.api.readOutbox()[sale.id], undefined);
+  assert.equal(h.api.readOutbox()[old.id].record.memo, old.memo);
+  assert.equal(h.api.readOutbox()[old.id].confirmationPending, true);
+  assert.equal(h.scheduled.at(-1),60000);
+  await h.api.flushOutbox();
+  assert.deepEqual(posts, [old.id,sale.id], 'a confirmation retry must not overwrite the server');
+  remote = old;
+  await h.api.flushOutbox();
+  assert.equal(Object.keys(h.api.readOutbox()).length,0);
+});
+
+test('old outbox entries confirm when only field order and the server deletion history differ', async () => {
+  const local = entryRecord();
+  const reordered = Object.fromEntries(Object.entries(local.attendanceLogs[0]).reverse());
+  const server = {...local, attendanceLogs:[reordered], attendanceDeletedIds:['deleted-on-other-device']};
+  const h = harness(async () => ({ok:true, record:server, attendanceProtection:'retained_existing_logs'}));
+  h.writeDraft(local);
+  const queued = h.api.readOutbox();
+  queued[local.id].signature = 'previous-client-format';
+  h.localStorage.setItem('cash_balance_app_save_outbox_v1', JSON.stringify(queued));
+  await h.api.flushOutbox();
+  assert.equal(Object.keys(h.api.readOutbox()).length,0);
+  assert.deepEqual(h.readDraft().attendanceDeletedIds,server.attendanceDeletedIds);
 });

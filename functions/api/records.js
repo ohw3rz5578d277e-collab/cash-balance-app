@@ -124,6 +124,22 @@ function mergeAttendanceLogs(serverItems, incomingItems, deletedIds, keepServerO
   return [...merged.values()];
 }
 
+function mergePosItems(serverItems, incomingItems, deletedKeys) {
+  const deleted = new Set(deletedKeys);
+  const merged = new Map();
+  // POS items are immutable once registered. Only an explicit deletion removes one.
+  for (const rows of [serverItems, incomingItems]) {
+    for (const item of Array.isArray(rows) ? rows : []) {
+      const key = itemKey(item);
+      if (key && !deleted.has(key) && !merged.has(key)) merged.set(key, item);
+    }
+  }
+  return [...merged.values()].sort((a, b) =>
+    text(a.createdAt || a.created_at || a.time).localeCompare(text(b.createdAt || b.created_at || b.time)) ||
+    itemKey(a).localeCompare(itemKey(b))
+  );
+}
+
 function isOlderClientRecord(record, existing) {
   if (!existing) return false;
   const serverUpdatedAt = Date.parse(text(existing.updated_at));
@@ -262,89 +278,69 @@ export async function onRequest(context) {
         }, 400);
       }
 
-      const existing = await env.DB.prepare(
-        `SELECT created_at, updated_at, payload
-         FROM cash_records
-         WHERE id = ?`
-      ).bind(id).first();
+      const posOnly = body.posOnly === true;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const existing = await env.DB.prepare(
+          `SELECT work_date, created_at, updated_at, payload
+           FROM cash_records
+           WHERE id = ?`
+        ).bind(id).first();
 
-      const existingPayload = existing
-        ? safeParsePayload(existing.payload)
-        : {};
-      const staleClient = isOlderClientRecord(record, existing);
-      const clientUpdatedAt = text(record.updatedAt || record.updated_at);
-      const attendanceDeletedIds = [...new Set([
-        ...(Array.isArray(existingPayload.attendanceDeletedIds) ? existingPayload.attendanceDeletedIds : []),
-        ...(Array.isArray(record.attendanceDeletedIds) ? record.attendanceDeletedIds : [])
-      ].map(text).filter(Boolean))];
-      const attendanceLogs = mergeAttendanceLogs(
-        existingPayload.attendanceLogs,
-        record.attendanceLogs,
-        attendanceDeletedIds,
-        staleClient
-      );
-
-      const createdAt =
-        text(record.createdAt || record.created_at || existing?.created_at) ||
-        nowIso();
-
-      const updatedAt = nowIso();
-
-      let savedRecord;
-      let staleMerge = false;
-
-      if (staleClient) {
-        staleMerge = true;
-        savedRecord = {
-          ...existingPayload,
-          ...record,
-          id,
-          date: workDate,
-          createdAt: text(record.createdAt || record.created_at || existingPayload.createdAt || existingPayload.created_at || existing?.created_at) || createdAt,
-          updatedAt,
-          posItems: mergeConcurrentItems(existingPayload.posItems, record.posItems, clientUpdatedAt, true),
-          gasItems: mergeConcurrentItems(existingPayload.gasItems, record.gasItems, clientUpdatedAt),
-          attendanceLogs,
-          attendanceDeletedIds
+        if (posOnly && (!existing || existing.work_date !== workDate)) {
+          return json({ ok: false, error: "元の明細の記録が見つかりません。" }, 404);
+        }
+        const previous = existing ? safeParsePayload(existing.payload) : {};
+        const staleMerge = !posOnly && isOlderClientRecord(record, existing);
+        const updatedAt = nowIso();
+        const createdAt = posOnly ? existing.created_at :
+          text(record.createdAt || record.created_at || existing?.created_at) || updatedAt;
+        const posDeletedKeys = [...new Set([
+          ...(Array.isArray(previous.posDeletedKeys) ? previous.posDeletedKeys : []),
+          ...(Array.isArray(record.posDeletedKeys) ? record.posDeletedKeys : [])
+        ].map(text).filter(Boolean))].sort();
+        const savedRecord = {
+          ...(posOnly ? previous : staleMerge ? { ...previous, ...record } : record),
+          id, date: workDate, createdAt, updatedAt, posDeletedKeys,
+          posItems: mergePosItems(previous.posItems, record.posItems, posDeletedKeys)
         };
-      } else {
-        savedRecord = {
-          ...record,
-          id,
-          date: workDate,
-          createdAt,
-          updatedAt,
-          attendanceLogs,
-          attendanceDeletedIds
-        };
+
+        if (!posOnly) {
+          const attendanceDeletedIds = [...new Set([
+            ...(Array.isArray(previous.attendanceDeletedIds) ? previous.attendanceDeletedIds : []),
+            ...(Array.isArray(record.attendanceDeletedIds) ? record.attendanceDeletedIds : [])
+          ].map(text).filter(Boolean))];
+          savedRecord.attendanceDeletedIds = attendanceDeletedIds;
+          savedRecord.attendanceLogs = mergeAttendanceLogs(
+            previous.attendanceLogs, record.attendanceLogs, attendanceDeletedIds, staleMerge
+          );
+          if (staleMerge) {
+            savedRecord.gasItems = mergeConcurrentItems(previous.gasItems, record.gasItems, record.updatedAt || record.updated_at);
+          }
+        }
+
+        const payload = JSON.stringify(savedRecord);
+        const written = existing
+          ? await env.DB.prepare(
+              `UPDATE cash_records SET work_date = ?, payload = ?, updated_at = ?
+               WHERE id = ? AND work_date = ? AND updated_at = ? AND payload = ?`
+            ).bind(workDate, payload, updatedAt, id, existing.work_date, existing.updated_at, existing.payload).run()
+          : await env.DB.prepare(
+              `INSERT INTO cash_records (id, work_date, payload, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`
+            ).bind(id, workDate, payload, createdAt, updatedAt).run();
+        if (!written.meta?.changes) continue;
+
+        return json({
+          ok: true, record: savedRecord, staleMerge,
+          attendanceProtection: 'retained_existing_logs',
+          posProtection: 'retained_existing_items',
+          protection: staleMerge
+            ? "stale_client_preserved_concurrent_items_and_honored_known_deletions"
+            : "normal_save"
+        });
       }
 
-      const savedWorkDate = text(savedRecord.date || workDate) || workDate;
-
-      await env.DB.prepare(
-        `INSERT INTO cash_records (id, work_date, payload, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           work_date = excluded.work_date,
-           payload = excluded.payload,
-           updated_at = excluded.updated_at`
-      ).bind(
-        id,
-        savedWorkDate,
-        JSON.stringify(savedRecord),
-        createdAt,
-        updatedAt
-      ).run();
-
-      return json({
-        ok: true,
-        record: savedRecord,
-        staleMerge,
-        attendanceProtection: 'retained_existing_logs',
-        protection: staleMerge
-          ? "stale_client_preserved_concurrent_items_and_honored_known_deletions"
-          : "normal_save"
-      });
+      return json({ ok: false, error: "別端末の保存と重なりました。もう一度お試しください。" }, 409);
     }
 
     if (request.method === "DELETE") {

@@ -59,18 +59,19 @@ function setSaveStatus(ok,text){
   try{window.dispatchEvent(new CustomEvent('cash-save-state-changed'))}catch(e){}
 }
 function localPendingText(){return pendingSaveLabel()||'端末保存済み'}
-function queueRecord(r,immediate){
+function queueRecord(r,immediate,posOnly){
   if(!r||!r.id)return;
   var box=readOutbox(),id=String(r.id),existing=box[id];
   if(existing&&existing.confirmationPending&&existing.record&&
     recordSignature(existing.record)===recordSignature(r))return true;
-  saveRecovery(r);
-  box[id]={record:JSON.parse(JSON.stringify(r)),signature:recordSignature(r),queuedAt:new Date().toISOString(),attempts:0};
+  if(!posOnly||existing&&!existing.posOnly)saveRecovery(r);
+  box[id]={posOnly:!!posOnly&&(!existing||existing.posOnly===true),record:JSON.parse(JSON.stringify(r)),signature:recordSignature(r),queuedAt:new Date().toISOString(),attempts:0};
   if(!writeOutbox(box))return false;
   setSaveStatus(false,localPendingText());
   if(Date.now()>=cloudPausedUntil)scheduleFlush(immediate?0:250);
   return true;
 }
+window.__cashQueuePosRecord=function(record,existing){return queueRecord(record,true,existing)};
 window.__cashQueueCurrentRecord=function(id){
   var record=draftState();
   return !!(record&&String(record.id)===String(id)&&queueRecord(record,true));
@@ -91,12 +92,33 @@ function deletedAttendanceIds(record){
   return Array.from(new Set(ids.map(String).filter(Boolean))).sort();
 }
 
+function posDeletedKeys(record){
+  return Array.from(new Set((Array.isArray(record.posDeletedKeys)?record.posDeletedKeys:[]).map(String))).sort();
+}
+
+function posItemKey(item){
+  var id=String(item.id??'').trim();
+  if(id)return 'id:'+id;
+  return ['legacy',item.sale,item.paid,item.change,item.tip,item.cost,item.memo,item.time,item.createdAt].join('|');
+}
+window.__cashPosItemKey=posItemKey;
+
+function missingPosItems(client,server){
+  var deleted=new Set(posDeletedKeys(server).concat(posDeletedKeys(client)));
+  var remote=new Set((Array.isArray(server.posItems)?server.posItems:[]).filter(Boolean).map(posItemKey));
+  return (Array.isArray(client.posItems)?client.posItems:[]).filter(function(item){
+    if(!item)return false;
+    var key=posItemKey(item);
+    return !deleted.has(key)&&!remote.has(key);
+  });
+}
+
 function syncComparable(record){
   var r=record||{};
   return JSON.stringify(canonicalRecordValue({
     id:r.id,date:r.date,dailySales:r.dailySales,salesMemo:String(r.salesMemo||''),
     memo:String(r.memo||''),counts:r.counts||{},startTime:r.startTime,endTime:r.endTime,
-    posItems:Array.isArray(r.posItems)?r.posItems:[],
+    posItems:Array.isArray(r.posItems)?r.posItems:[],posDeletedKeys:posDeletedKeys(r),
     gasItems:Array.isArray(r.gasItems)?r.gasItems:[],
     attendanceLogs:Array.isArray(r.attendanceLogs)?r.attendanceLogs:[],
     attendanceDeletedIds:deletedAttendanceIds(r),uberPending:r.uberPending,
@@ -123,23 +145,32 @@ function itemsSafelyMerged(client,server,clientTime,allowServerRetained){
   });
 }
 
-function safeServerAdditions(client,server,allowServerRetained){
+function safeServerAdditions(client,server,allowServerRetained,allowPosRetained){
   if(!client||!server||String(client.id)!==String(server.id))return false;
   var at=Date.parse(String(client.updatedAt||''));
   var clientDeletes=deletedAttendanceIds(client),serverDeletes=deletedAttendanceIds(server);
   if(clientDeletes.some(function(id){return !serverDeletes.includes(id)}))return false;
   var localPunches=Array.isArray(client.attendanceLogs)?client.attendanceLogs:[];
   if(localPunches.some(function(punch){return punch&&serverDeletes.includes(String(punch.id))}))return false;
-  var blank=function(r){return Object.assign({},r,{attendanceLogs:[],attendanceDeletedIds:[],posItems:[],gasItems:[]})};
+  var serverPosDeletes=posDeletedKeys(server);
+  if(posDeletedKeys(client).some(function(key){return !serverPosDeletes.includes(key)}))return false;
+  var blank=function(r){return Object.assign({},r,{attendanceLogs:[],attendanceDeletedIds:[],posItems:[],posDeletedKeys:[],gasItems:[]})};
   if(syncComparable(blank(client))!==syncComparable(blank(server)))return false;
   return ['attendanceLogs','posItems','gasItems'].every(function(k){
-    return itemsSafelyMerged(client[k],server[k],at,allowServerRetained&&k==='attendanceLogs');
+    var localItems=client[k];
+    if(k==='posItems'&&allowPosRetained){
+      localItems=(Array.isArray(localItems)?localItems:[]).filter(function(item){
+        return item&&!serverPosDeletes.includes(posItemKey(item));
+      });
+    }
+    return itemsSafelyMerged(localItems,server[k],at,
+      (allowServerRetained&&k==='attendanceLogs')||(allowPosRetained&&k==='posItems'));
   });
 }
 function adoptServerAdditions(id,expected,server){var b=draftBox(),cur=b&&b.state;if(!cur||String(cur.id)!==String(id))return true;if(recordSignature(cur)!==recordSignature(expected))return false;b.state=server;b.updatedAt=server.updatedAt||new Date().toISOString();try{nativeSetItem.call(localStorage,DRAFTKEY,JSON.stringify(b));var saved=draftState();if(!saved||syncComparable(saved)!==syncComparable(server))return false}catch(e){return false}try{window.dispatchEvent(new CustomEvent('cash-attendance-saved',{detail:{recordId:String(id)}}))}catch(e){}return true}
 
 async function verifyCloudRecord(r){var remote=await fetchRecord(r&&r.id);return !!remote&&syncComparable(remote)===syncComparable(r)}
-async function postRecord(r,keepalive){var pin=localStorage.getItem(PINKEY)||'';if(!pin)throw new Error('PINなし');var res=await fetch(API,{method:'POST',cache:'no-store',keepalive:!!keepalive,headers:{'content-type':'application/json','x-app-pin':pin},body:JSON.stringify({record:r})});var data=await res.json().catch(function(){return{}});if(!res.ok||data.ok===false){var e=new Error(data.error||('保存エラー '+res.status));e.status=res.status;throw e}return data}
+async function postRecord(r,keepalive,posOnly){var pin=localStorage.getItem(PINKEY)||'';if(!pin)throw new Error('PINなし');var res=await fetch(API,{method:'POST',cache:'no-store',keepalive:!!keepalive,headers:{'content-type':'application/json','x-app-pin':pin},body:JSON.stringify(posOnly?{record:r,posOnly:true}:{record:r})});var data=await res.json().catch(function(){return{}});if(!res.ok||data.ok===false){var e=new Error(data.error||('保存エラー '+res.status));e.status=res.status;throw e}return data}
 async function flushOutbox(){
   if(flushBusy)return;
   var remainingPause=cloudPausedUntil-Date.now();
@@ -162,20 +193,42 @@ async function flushOutbox(){
         retryDelay=0;
         continue;
       }
-      // Once a differing response is recorded, retry confirmation by reading the server only.
-      var saved=entry.confirmationPending
-        ?{record:await fetchRecord(id),attendanceProtection:'retained_existing_logs'}
-        :await postRecord(entry.record,false);
+      var saved;
+      if(entry.confirmationPending){
+        var remote=await fetchRecord(id);
+        if(remote&&remote.date===entry.record.date){
+          var missing=missingPosItems(entry.record,remote);
+          var pendingDeletes=posDeletedKeys(entry.record).filter(function(key){return !posDeletedKeys(remote).includes(key)});
+          var queued=readOutbox()[id];
+          if((missing.length||pendingDeletes.length)&&queued&&
+            recordSignature(queued.record)===recordSignature(entry.record)){
+            saved=await postRecord({id:id,date:entry.record.date,posItems:missing,posDeletedKeys:pendingDeletes},false,true);
+          }
+        }
+        if(!saved)saved={record:remote,attendanceProtection:'retained_existing_logs',posProtection:'retained_existing_items'};
+      }else if(entry.posOnly){
+        saved=await postRecord({id:id,date:entry.record.date,posItems:entry.record.posItems,
+          posDeletedKeys:entry.record.posDeletedKeys},false,true);
+      }else saved=await postRecord(entry.record,false);
+
       var serverRecord=saved&&saved.record;
       var exact=!!serverRecord&&syncComparable(serverRecord)===syncComparable(entry.record);
-      var canMerge=!!saved&&(saved.staleMerge===true||saved.attendanceProtection==='retained_existing_logs');
-      var merged=!exact&&canMerge&&safeServerAdditions(entry.record,serverRecord,saved.attendanceProtection==='retained_existing_logs');
+      var retainedPos=saved&&saved.posProtection==='retained_existing_items';
+      var canMerge=!!saved&&(saved.staleMerge===true||saved.attendanceProtection==='retained_existing_logs'||retainedPos);
+      var merged=!exact&&canMerge&&safeServerAdditions(entry.record,serverRecord,
+        saved.attendanceProtection==='retained_existing_logs',retainedPos);
       var latest=readOutbox(),now=latest[id];
       if(!now||!now.record||recordSignature(now.record)!==recordSignature(entry.record)){
         retryDelay=0;
         continue;
       }
-      if((!exact&&!merged)||(merged&&!adoptServerAdditions(id,entry.record,serverRecord))){
+      var posConfirmed=entry.posOnly&&serverRecord&&serverRecord.date===entry.record.date&&
+        String(serverRecord.id)===id&&
+        posDeletedKeys(entry.record).every(function(key){return posDeletedKeys(serverRecord).includes(key)})&&
+        itemsSafelyMerged((entry.record.posItems||[]).filter(function(item){
+          return item&&!posDeletedKeys(serverRecord).includes(posItemKey(item));
+        }),serverRecord.posItems,0,true);
+      if((!exact&&!merged&&!posConfirmed)||((merged||posConfirmed)&&!adoptServerAdditions(id,entry.record,serverRecord))){
         if(!now.confirmationPending){
           now.confirmationPending=true;
           writeOutbox(latest);
@@ -186,7 +239,7 @@ async function flushOutbox(){
       delete latest[id];
       writeOutbox(latest);
       clearRecoveryIfSynced(entry.record);
-      try{window.dispatchEvent(new CustomEvent('cash-record-synced',{detail:{recordId:String(id)}}))}catch(e){}
+      try{window.dispatchEvent(new CustomEvent('cash-record-synced',{detail:{recordId:String(id),record:serverRecord}}))}catch(e){}
       dataCheckCache=serverRecord;
       dataCheckAt=Date.now();
     }
@@ -223,7 +276,11 @@ function emergencyFlush(){
   var box=readOutbox();
   Object.keys(box).slice(0,3).forEach(function(id){
     var entry=box[id];
-    if(entry&&entry.record&&!entry.confirmationPending)postRecord(entry.record,true).catch(function(){});
+    if(entry&&entry.record&&!entry.confirmationPending){
+      var r=entry.record;
+      var payload=entry.posOnly?{id:id,date:r.date,posItems:r.posItems,posDeletedKeys:r.posDeletedKeys}:r;
+      postRecord(payload,true,entry.posOnly).catch(function(){});
+    }
   });
 }
 
@@ -274,7 +331,7 @@ function renderHomeSummary(){
   adjustment.textContent=amount===0&&r.bankDepositActual==null?'未入力':yen(Math.abs(amount))+(amount<0?' 支払い予定':'');
 }
 
-async function renderDataCheck(){var home=document.getElementById('view-home'),r=draftState();if(!home||!r)return;ensureDataCheckStyle();var p=document.getElementById('cbTodayDataCheck');if(!p){p=document.createElement('section');p.id='cbTodayDataCheck';p.className='panel cb-data-check';p.hidden=true;document.getElementById('cashTodayPanel').insertAdjacentElement('afterend',p)}var pending=outboxCount(),pos=Array.isArray(r.posItems)?r.posItems.length:0,att=Array.isArray(r.attendanceLogs)?r.attendanceLogs.length:0,bankReady=!!(r.bankDepositPeriodStart&&r.bankDepositPeriodEnd),pin=localStorage.getItem(PINKEY)||'';var cloud=Date.now()<cloudPausedUntil?'クラウド制限中・端末保存で継続できます':'確認中…',cloudOk=false;if(pin&&r.id&&Date.now()>=cloudPausedUntil){try{var hit=null,now=Date.now();if(dataCheckCache&&String(dataCheckCache.id)===String(r.id)&&now-dataCheckAt<60000){hit=dataCheckCache}else if(!dataCheckBusy){dataCheckBusy=true;try{hit=await fetchRecord(r.id);dataCheckCache=hit;dataCheckAt=Date.now()}finally{dataCheckBusy=false}}else if(dataCheckCache&&String(dataCheckCache.id)===String(r.id))hit=dataCheckCache;var current=draftState();if(!current||String(current.id)!==String(r.id)||recordSignature(current)!==recordSignature(r))return;if(hit&&String(hit.id)===String(r.id)){var lp=Array.isArray(hit.posItems)?hit.posItems.length:0,la=Array.isArray(hit.attendanceLogs)?hit.attendanceLogs.length:0;var localPos=Array.isArray(r.posItems)?r.posItems:[],remotePos=Array.isArray(hit.posItems)?hit.posItems:[],remoteKeys={};remotePos.forEach(function(x){remoteKeys[itemKey(x)]=1});var missing=localPos.filter(function(x){return !remoteKeys[itemKey(x)]});cloudOk=lp===pos&&la===att&&missing.length===0;if(missing.length){cloud='POS '+missing.length+'件を自動修復中';if(!readOutbox()[String(r.id)]?.confirmationPending){queueRecord(r,true);scheduleFlush(0)}}else cloud=cloudOk?'D1の件数一致':'要再同期（POS '+lp+'/'+pos+'・勤怠 '+la+'/'+att+'）'}else cloud='D1未確認'}catch(e){cloud='通信確認待ち'}}p.innerHTML='<div class="head"><div><h2>今日のデータ確認</h2><div class="help">'+formatDate(r.date)+' / 入力漏れ・未同期をここで確認</div></div><div class="small">'+(pending?'未送信 '+pending+'件':'送信待ち 0件')+'</div></div><div class="cb-check-grid"><div class="cb-check '+(pending?'warn':'ok')+'"><b>保存状態</b><span>'+(pending?'未送信あり':'端末送信済み')+'</span></div><div class="cb-check '+(cloudOk?'ok':'warn')+'"><b>D1照合</b><span>'+cloud+'</span></div><div class="cb-check '+(pos?'ok':'warn')+'"><b>POS</b><span>'+pos+'件</span></div><div class="cb-check '+(att?'ok':'warn')+'"><b>勤怠</b><span>'+att+'件</span></div><div class="cb-check '+(bankReady?'ok':'warn')+'"><b>銀行入金期間</b><span>'+(bankReady?'設定済み':'未設定')+'</span></div></div>'}
+async function renderDataCheck(){var home=document.getElementById('view-home'),r=draftState();if(!home||!r)return;ensureDataCheckStyle();var p=document.getElementById('cbTodayDataCheck');if(!p){p=document.createElement('section');p.id='cbTodayDataCheck';p.className='panel cb-data-check';p.hidden=true;document.getElementById('cashTodayPanel').insertAdjacentElement('afterend',p)}var pending=outboxCount(),pos=Array.isArray(r.posItems)?r.posItems.length:0,att=Array.isArray(r.attendanceLogs)?r.attendanceLogs.length:0,bankReady=!!(r.bankDepositPeriodStart&&r.bankDepositPeriodEnd),pin=localStorage.getItem(PINKEY)||'';var cloud=Date.now()<cloudPausedUntil?'クラウド制限中・端末保存で継続できます':'確認中…',cloudOk=false;if(pin&&r.id&&Date.now()>=cloudPausedUntil){try{var hit=null,now=Date.now();if(dataCheckCache&&String(dataCheckCache.id)===String(r.id)&&now-dataCheckAt<60000){hit=dataCheckCache}else if(!dataCheckBusy){dataCheckBusy=true;try{hit=await fetchRecord(r.id);dataCheckCache=hit;dataCheckAt=Date.now()}finally{dataCheckBusy=false}}else if(dataCheckCache&&String(dataCheckCache.id)===String(r.id))hit=dataCheckCache;var current=draftState();if(!current||String(current.id)!==String(r.id)||recordSignature(current)!==recordSignature(r))return;if(hit&&String(hit.id)===String(r.id)){var lp=Array.isArray(hit.posItems)?hit.posItems.length:0,la=Array.isArray(hit.attendanceLogs)?hit.attendanceLogs.length:0;var localPos=Array.isArray(r.posItems)?r.posItems:[],remotePos=Array.isArray(hit.posItems)?hit.posItems:[],remoteKeys={};remotePos.forEach(function(x){remoteKeys[itemKey(x)]=1});var missing=localPos.filter(function(x){return !remoteKeys[itemKey(x)]});cloudOk=lp===pos&&la===att&&missing.length===0;if(missing.length){cloud='POS '+missing.length+'件の保存を確認できません'}else cloud=cloudOk?'D1の件数一致':'要再同期（POS '+lp+'/'+pos+'・勤怠 '+la+'/'+att+'）'}else cloud='D1未確認'}catch(e){cloud='通信確認待ち'}}p.innerHTML='<div class="head"><div><h2>今日のデータ確認</h2><div class="help">'+formatDate(r.date)+' / 入力漏れ・未同期をここで確認</div></div><div class="small">'+(pending?'未送信 '+pending+'件':'送信待ち 0件')+'</div></div><div class="cb-check-grid"><div class="cb-check '+(pending?'warn':'ok')+'"><b>保存状態</b><span>'+(pending?'未送信あり':'端末送信済み')+'</span></div><div class="cb-check '+(cloudOk?'ok':'warn')+'"><b>D1照合</b><span>'+cloud+'</span></div><div class="cb-check '+(pos?'ok':'warn')+'"><b>POS</b><span>'+pos+'件</span></div><div class="cb-check '+(att?'ok':'warn')+'"><b>勤怠</b><span>'+att+'件</span></div><div class="cb-check '+(bankReady?'ok':'warn')+'"><b>銀行入金期間</b><span>'+(bankReady?'設定済み':'未設定')+'</span></div></div>'}
 function countSection(r,k){var c=r&&r.counts&&r.counts[k]?r.counts[k]:{};return DENOMS.reduce(function(s,d){return s+money(c[String(d)])*d},0)}
 function countTips(r){var a=Array.isArray(r&&r.posItems)?r.posItems:[],v=0;a.forEach(function(x){v+=money(x&&x.tip)});return v+countSection(r,'tips')}
 function difference(r){if(!r)return null;var end=countSection(r,'end');if(!(end>0||r.endTime))return null;var pos=Array.isArray(r.posItems)?r.posItems:[],gas=Array.isArray(r.gasItems)?r.gasItems:[];var sales=pos.reduce(function(s,x){return s+money(x&&x.sale)},0);var gasCost=gas.reduce(function(s,x){return s+money(x&&x.cost)},0);var expected=countSection(r,'start')+sales+countSection(r,'received')+countTips(r)+countSection(r,'exchange')-gasCost-signed(r.uberPending);return end-expected}

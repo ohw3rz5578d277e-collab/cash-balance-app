@@ -21,39 +21,44 @@ function createApi() {
         bind(...params) { bound = params; return this; },
         async first() {
           const existing = rows.get(String(bound[0]));
-          return existing ? { created_at: existing.created_at, updated_at: existing.updated_at, payload: existing.payload } : null;
+          return existing ? { work_date: existing.work_date, created_at: existing.created_at, updated_at: existing.updated_at, payload: existing.payload } : null;
         },
         async all() {
           const record = rows.get(String(bound[0]));
           return { results: record ? [record] : [] };
         },
         async run() {
-          if (!sql.includes('INSERT INTO cash_records')) {
+          if (sql.includes('INSERT INTO cash_records')) {
+            const [id, workDate, payload, createdAt, updatedAt] = bound;
+            if (rows.has(String(id))) return { meta: { changes: 0 } };
+            rows.set(String(id), { id, work_date: workDate, payload, created_at: createdAt, updated_at: updatedAt });
+          } else if (sql.includes('UPDATE cash_records')) {
+            const [workDate, payload, updatedAt, id, oldDate, oldTime, oldPayload] = bound;
+            const previous = rows.get(String(id));
+            if (!previous || previous.work_date !== oldDate || previous.updated_at !== oldTime ||
+              previous.payload !== oldPayload) return { meta: { changes: 0 } };
+            rows.set(String(id), { ...previous, work_date: workDate, payload, updated_at: updatedAt });
+          } else {
             throw new Error('unexpected D1 write');
           }
-          const [id, workDate, payload, createdAt, updatedAt] = bound;
-          rows.set(String(id), {
-            id: String(id), work_date: String(workDate), payload,
-            created_at: String(createdAt), updated_at: String(updatedAt)
-          });
-          return { success: true };
+          return { meta: { changes: 1 } };
         }
       };
     }
   };
   const win = {};
   vm.runInNewContext(source, { window: win, Request, Response, URL }, { filename: 'functions/api/records.js' });
-  const invoke = async (method, record, id = record && record.id) => {
+  const invoke = async (method, record, id = record && record.id, posOnly = false, status = 200) => {
     const url = 'https://example.test/api/records' + (method === 'GET' ? '?id=' + encodeURIComponent(id) : '');
     const request = new Request(url, {
       method,
       headers: { 'x-app-pin': 'test-pin', 'content-type': 'application/json' },
-      ...(method === 'POST' ? { body: JSON.stringify({ record }) } : {})
+      ...(method === 'POST' ? { body: JSON.stringify({ record, posOnly }) } : {})
     });
     const response = await win.__attendanceApiTest({ request, env: { DB, APP_PIN: 'test-pin' } });
-    assert.equal(response.status, 200);
+    assert.equal(response.status, status);
     const data = await response.json();
-    assert.equal(data.ok, true);
+    assert.equal(data.ok, status === 200);
     return data;
   };
   return { invoke };
@@ -124,4 +129,37 @@ test('explicit punch deletion is persisted by tombstone across devices', async (
   assert.deepEqual(deleted.record.attendanceDeletedIds, ['att-in']);
   const stale = await invoke('POST', { id: 'rec-test', date: '2026-11-03', updatedAt: '2026-10-01T01:00:00.000Z', attendanceLogs: [a] });
   assert.equal(stale.record.attendanceLogs.length, 0, 'a stale device may not resurrect a deleted punch');
+});
+
+test('simultaneous POS-only additions preserve each other, existing legacy POS and non-POS fields', async () => {
+  const {invoke} = createApi();
+  const record = {id:'rec-shared',date:'2026-11-18',dailySales:1200,memo:'keep'};
+  const legacy = {sale:550,paid:1000,change:450,time:'09:00'};
+  const a = {id:'pos-A',sale:300,paid:300};
+  const b = {id:'pos-B',sale:600,paid:600};
+  await invoke('POST',{...record,posItems:[legacy]});
+  await Promise.all([a,b].map(row=>invoke('POST',{
+    id:record.id,date:record.date,posItems:[row],dailySales:0,memo:'overwrite'
+  },record.id,true)));
+  const saved=(await invoke('GET',null,record.id)).records[0];
+  assert.equal(saved.dailySales,1200);
+  assert.equal(saved.memo,'keep');
+  assert.deepEqual(saved.posItems,[a,b,legacy]);
+  await invoke('POST',{...record,posItems:[]},record.id);
+  const after=(await invoke('GET',null,record.id)).records[0];
+  assert.deepEqual(after.posItems,saved.posItems,'a stale client omitting POS cannot erase any line');
+});
+
+test('POS-only deletion is explicit and a stale retry cannot resurrect the removed line', async () => {
+  const {invoke} = createApi();
+  const item={id:'sold-1',sale:300,paid:300};
+  const record={id:'rec-1',date:'2026-11-18',posItems:[item]};
+  await invoke('POST',record);
+  const deleted=await invoke('POST',{id:record.id,date:record.date,posDeletedKeys:['id:sold-1']},record.id,true);
+  assert.deepEqual(deleted.record.posItems,[]);
+  await invoke('POST',record);
+  const saved=(await invoke('GET',null,record.id)).records[0];
+  assert.deepEqual(saved.posItems,[]);
+  assert.deepEqual(saved.posDeletedKeys,['id:sold-1']);
+  await invoke('POST',{...record,date:'2026-11-17'},record.id,true,404);
 });

@@ -229,3 +229,27 @@ test('old outbox entries confirm when only field order and the server deletion h
   assert.equal(Object.keys(h.api.readOutbox()).length,0);
   assert.deepEqual(h.readDraft().attendanceDeletedIds,server.attendanceDeletedIds);
 });
+
+test('recovering a POS line from an old confirmation-pending record sends only POS fields', async () => {
+  const item={id:'pos-local',sale:1000,paid:1000};
+  const record={...entryRecord(),memo:'old local memo',posItems:[item]};
+  const remote={...record,memo:'latest cloud memo',posItems:[]};
+  const writes=[];
+  const h=harness(async options=>{
+    if(!options.method)return {ok:true,records:[remote]};
+    const body=JSON.parse(options.body);
+    writes.push(body);
+    remote.posItems=[item];
+    return {ok:true,record:remote,posProtection:'retained_existing_items'};
+  });
+  const key='cash_balance_app_save_outbox_v1';
+  h.writeDraft(record);
+  const queued=h.api.readOutbox();
+  queued[record.id].confirmationPending=true;
+  h.localStorage.setItem(key,JSON.stringify(queued));
+  await h.api.flushOutbox();
+  await h.api.flushOutbox();
+  assert.deepEqual(writes,[{posOnly:true,record:{id:record.id,date:record.date,posItems:[item],posDeletedKeys:[]}}]);
+  assert.equal(h.api.readOutbox()[record.id].record.memo,'old local memo');
+  assert.equal(remote.memo,'latest cloud memo');
+});
